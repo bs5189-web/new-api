@@ -138,6 +138,16 @@ export interface CustomOAuthBinding {
   external_id?: string
 }
 
+export interface OAuthServerUserGrant {
+  id: number
+  client_id: string
+  client_name: string
+  scopes: string[]
+  last_used_at?: string
+  created_at: string
+  updated_at: string
+}
+
 /**
  * Get current user's custom OAuth bindings
  */
@@ -155,6 +165,28 @@ export async function unbindCustomOAuth(
   providerId: string
 ): Promise<ApiResponse> {
   const res = await api.delete(`/api/user/oauth/bindings/${providerId}`)
+  return res.data
+}
+
+/**
+ * Get current user's OAuth server grants
+ */
+export async function getOAuthServerGrants(): Promise<
+  ApiResponse<OAuthServerUserGrant[]>
+> {
+  const res = await api.get('/api/user/oauth-server/grants')
+  return res.data
+}
+
+/**
+ * Revoke an OAuth server grant for current user
+ */
+export async function revokeOAuthServerGrant(
+  clientId: string
+): Promise<ApiResponse> {
+  const res = await api.delete(
+    `/api/user/oauth-server/grants/${encodeURIComponent(clientId)}`
+  )
   return res.data
 }
 

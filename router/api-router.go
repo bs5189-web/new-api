@@ -121,6 +121,8 @@ func SetApiRouter(router *gin.Engine) {
 				// Custom OAuth bindings
 				selfRoute.GET("/oauth/bindings", controller.GetUserOAuthBindings)
 				selfRoute.DELETE("/oauth/bindings/:provider_id", controller.UnbindCustomOAuth)
+				selfRoute.GET("/oauth-server/grants", controller.ListOAuthServerUserGrants)
+				selfRoute.DELETE("/oauth-server/grants/:client_id", controller.RevokeOAuthServerUserGrant)
 			}
 
 			adminRoute := userRoute.Group("/")
@@ -207,6 +209,11 @@ func SetApiRouter(router *gin.Engine) {
 			customOAuthRoute.POST("/", controller.CreateCustomOAuthProvider)
 			customOAuthRoute.PUT("/:id", controller.UpdateCustomOAuthProvider)
 			customOAuthRoute.DELETE("/:id", controller.DeleteCustomOAuthProvider)
+		}
+		oauthServerAdminRoute := apiRouter.Group("/oauth-server/admin")
+		oauthServerAdminRoute.Use(middleware.AdminAuth())
+		{
+			oauthServerAdminRoute.GET("/status", controller.OAuthServerAdminStatus)
 		}
 		performanceRoute := apiRouter.Group("/performance")
 		performanceRoute.Use(middleware.RootAuth())

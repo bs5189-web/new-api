@@ -1,6 +1,9 @@
 package model
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -272,8 +275,136 @@ func GetTokenByKey(key string, fromDB bool) (token *Token, err error) {
 		// Don't return error - fall through to DB
 	}
 	fromDB = true
-	err = DB.Where(commonKeyCol+" = ?", key).First(&token).Error
+	err = DB.Where(&Token{Key: key}).First(&token).Error
 	return token, err
+}
+
+func OAuthRelayTokenKey(userID int, clientID string) string {
+	mac := hmac.New(sha256.New, []byte(oauthRelayTokenSecret()))
+	_, _ = mac.Write([]byte(fmt.Sprintf("oauth-relay:%d:%s", userID, strings.TrimSpace(clientID))))
+	return "oauth-" + hex.EncodeToString(mac.Sum(nil))
+}
+
+func oauthRelayTokenSecret() string {
+	if common.CryptoSecret != "" {
+		return common.CryptoSecret
+	}
+	return common.SessionSecret
+}
+
+func legacyOAuthRelayTokenKey(userID int, clientID string) string {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("oauth-relay:%d:%s", userID, strings.TrimSpace(clientID))))
+	return "oauth-" + hex.EncodeToString(sum[:])
+}
+
+func GetOrCreateOAuthRelayToken(userID int, clientID string, clientName string) (*Token, error) {
+	clientID = strings.TrimSpace(clientID)
+	if userID <= 0 || clientID == "" {
+		return nil, errors.New("invalid oauth relay token owner")
+	}
+
+	key := OAuthRelayTokenKey(userID, clientID)
+	legacyKey := legacyOAuthRelayTokenKey(userID, clientID)
+	name := strings.TrimSpace(clientName)
+	if name == "" {
+		name = clientID
+	}
+	name = "OAuth: " + name
+
+	var token Token
+	err := DB.Unscoped().Where(&Token{UserId: userID, Key: key}).First(&token).Error
+	if err == nil {
+		if legacyKey != key {
+			if err := disableLegacyOAuthRelayToken(userID, legacyKey, token.Id); err != nil {
+				return nil, err
+			}
+		}
+		updates := map[string]interface{}{}
+		if token.DeletedAt.Valid {
+			updates["deleted_at"] = nil
+		}
+		if token.Name != name {
+			updates["name"] = name
+		}
+		if token.Status != common.TokenStatusEnabled {
+			updates["status"] = common.TokenStatusEnabled
+		}
+		if token.ExpiredTime != -1 {
+			updates["expired_time"] = -1
+		}
+		if !token.UnlimitedQuota {
+			updates["unlimited_quota"] = true
+		}
+		if len(updates) > 0 {
+			if err := DB.Unscoped().Model(&token).Updates(updates).Error; err != nil {
+				return nil, err
+			}
+			if err := DB.Unscoped().Where("id = ?", token.Id).First(&token).Error; err != nil {
+				return nil, err
+			}
+		}
+		return &token, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	if legacyKey != key {
+		err = DB.Unscoped().Where(&Token{UserId: userID, Key: legacyKey}).First(&token).Error
+		if err == nil {
+			return updateOAuthRelayToken(&token, key, name)
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+	}
+
+	now := common.GetTimestamp()
+	token = Token{
+		UserId:         userID,
+		Key:            key,
+		Status:         common.TokenStatusEnabled,
+		Name:           name,
+		CreatedTime:    now,
+		AccessedTime:   now,
+		ExpiredTime:    -1,
+		UnlimitedQuota: true,
+	}
+	if err := DB.Create(&token).Error; err != nil {
+		return nil, err
+	}
+	return &token, nil
+}
+
+func updateOAuthRelayToken(token *Token, key string, name string) (*Token, error) {
+	updates := map[string]interface{}{
+		"key":             key,
+		"name":            name,
+		"status":          common.TokenStatusEnabled,
+		"expired_time":    -1,
+		"unlimited_quota": true,
+	}
+	if token.DeletedAt.Valid {
+		updates["deleted_at"] = nil
+	}
+	if err := DB.Unscoped().Model(token).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+	if err := DB.Unscoped().Where("id = ?", token.Id).First(token).Error; err != nil {
+		return nil, err
+	}
+	return token, nil
+}
+
+func disableLegacyOAuthRelayToken(userID int, legacyKey string, keepTokenID int) error {
+	if legacyKey == "" {
+		return nil
+	}
+	return DB.Unscoped().
+		Model(&Token{}).
+		Where(&Token{UserId: userID, Key: legacyKey}).
+		Where("id <> ?", keepTokenID).
+		Update("status", common.TokenStatusDisabled).
+		Error
 }
 
 func (token *Token) Insert() error {

@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/oauthserver"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 
@@ -312,15 +313,18 @@ func TokenAuth() func(c *gin.Context) {
 			}
 		}
 		key := c.Request.Header.Get("Authorization")
+		rawBearerToken := ""
 		parts := make([]string, 0)
 		if strings.HasPrefix(key, "Bearer ") || strings.HasPrefix(key, "bearer ") {
 			key = strings.TrimSpace(key[7:])
 		}
+		rawBearerToken = key
 		if key == "" || key == "midjourney-proxy" {
 			key = c.Request.Header.Get("mj-api-secret")
 			if strings.HasPrefix(key, "Bearer ") || strings.HasPrefix(key, "bearer ") {
 				key = strings.TrimSpace(key[7:])
 			}
+			rawBearerToken = key
 			key = strings.TrimPrefix(key, "sk-")
 			parts = strings.Split(key, "-")
 			key = parts[0]
@@ -328,6 +332,21 @@ func TokenAuth() func(c *gin.Context) {
 			key = strings.TrimPrefix(key, "sk-")
 			parts = strings.Split(key, "-")
 			key = parts[0]
+		}
+		if isOAuthRelayAccessToken(rawBearerToken) {
+			if authErr := SetupContextForOAuthRelayToken(c, rawBearerToken); authErr == nil {
+				c.Next()
+				return
+			} else if isOAuthRelayAuthInvalid(authErr) {
+				abortWithOpenAiMessage(c, http.StatusUnauthorized,
+					common.TranslateMessage(c, i18n.MsgTokenInvalid))
+				return
+			} else {
+				common.SysLog("TokenAuth OAuth relay auth error: " + authErr.Error())
+				abortWithOpenAiMessage(c, http.StatusInternalServerError,
+					common.TranslateMessage(c, i18n.MsgDatabaseError))
+				return
+			}
 		}
 		token, err := model.ValidateUserToken(key)
 		if token != nil {
@@ -404,6 +423,71 @@ func TokenAuth() func(c *gin.Context) {
 		}
 		c.Next()
 	}
+}
+
+func isOAuthRelayAccessToken(token string) bool {
+	token = strings.TrimSpace(token)
+	if token == "" || strings.HasPrefix(token, "sk-") {
+		return false
+	}
+	return strings.Count(token, ".") == 2
+}
+
+func isOAuthRelayAuthInvalid(err error) bool {
+	return errors.Is(err, oauthserver.ErrInvalidToken) ||
+		errors.Is(err, oauthserver.ErrInvalidClient) ||
+		errors.Is(err, oauthserver.ErrInvalidUser) ||
+		errors.Is(err, gorm.ErrRecordNotFound)
+}
+
+func SetupContextForOAuthRelayToken(c *gin.Context, accessToken string) error {
+	auth, err := oauthserver.AuthenticateRelayAccessToken(c.Request.Context(), model.DB, accessToken)
+	if err != nil {
+		return err
+	}
+
+	userCache, err := model.GetUserCache(auth.UserID)
+	if err != nil {
+		return err
+	}
+	if userCache.Status != common.UserStatusEnabled {
+		return oauthserver.ErrInvalidUser
+	}
+	if !oauthRelayScopesAllowInvoke(auth.Scopes) {
+		return oauthserver.ErrInvalidToken
+	}
+	userCache.WriteContext(c)
+
+	token, err := model.GetOrCreateOAuthRelayToken(auth.UserID, auth.ClientID, auth.ClientName)
+	if err != nil {
+		return err
+	}
+
+	userGroup := userCache.Group
+	tokenGroup := token.Group
+	if tokenGroup != "" {
+		if _, ok := service.GetUserUsableGroups(userGroup)[tokenGroup]; !ok {
+			return fmt.Errorf("%w: 无权访问 %s 分组", oauthserver.ErrInvalidToken, tokenGroup)
+		}
+		if !ratio_setting.ContainsGroupRatio(tokenGroup) && tokenGroup != "auto" {
+			return fmt.Errorf("%w: 分组 %s 已被弃用", oauthserver.ErrInvalidToken, tokenGroup)
+		}
+		userGroup = tokenGroup
+	}
+	common.SetContextKey(c, constant.ContextKeyUsingGroup, userGroup)
+
+	c.Set("oauth_access_token_id", auth.AccessTokenID)
+	c.Set("oauth_client_id", auth.ClientID)
+	return SetupContextForToken(c, token)
+}
+
+func oauthRelayScopesAllowInvoke(scopes []string) bool {
+	for _, scope := range scopes {
+		if scope == oauthserver.ScopeConnectorsInvoke {
+			return true
+		}
+	}
+	return false
 }
 
 func SetupContextForToken(c *gin.Context, token *model.Token, parts ...string) error {

@@ -39,6 +39,30 @@ export type UpdateOptionResponse = {
   message: string
 }
 
+export type OAuthServerClientStatus = {
+  client_id: string
+  client_name: string
+  public: boolean
+  redirect_uris: string[]
+  allowed_scopes: string[]
+  enabled: boolean
+}
+
+export type OAuthServerStatus = {
+  enabled: boolean
+  issuer: string
+  signing_key_configured: boolean
+  signing_key_id?: string
+  error?: string
+  codex_client: OAuthServerClientStatus
+}
+
+export type OAuthServerStatusResponse = {
+  success: boolean
+  message: string
+  data: OAuthServerStatus
+}
+
 export type ConfirmPaymentComplianceResponse = {
   success: boolean
   message: string
