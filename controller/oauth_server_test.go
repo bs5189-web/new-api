@@ -83,8 +83,9 @@ func setupOAuthServerControllerTest(t *testing.T) (*gin.Engine, *gorm.DB) {
 
 func TestOAuthAuthorizeMissingSessionRedirectsToThemeLogin(t *testing.T) {
 	router, _ := setupOAuthServerControllerTest(t)
+	previousTheme := common.GetTheme()
 	common.SetTheme("classic")
-	t.Cleanup(func() { common.SetTheme("classic") })
+	t.Cleanup(func() { common.SetTheme(previousTheme) })
 
 	req := httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+validAuthorizeQuery().Encode(), nil)
 	rec := httptest.NewRecorder()
