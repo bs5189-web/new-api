@@ -81,8 +81,10 @@ func setupOAuthServerControllerTest(t *testing.T) (*gin.Engine, *gorm.DB) {
 	return router, db
 }
 
-func TestOAuthAuthorizeMissingSessionRedirectsToLogin(t *testing.T) {
+func TestOAuthAuthorizeMissingSessionRedirectsToThemeLogin(t *testing.T) {
 	router, _ := setupOAuthServerControllerTest(t)
+	common.SetTheme("classic")
+	t.Cleanup(func() { common.SetTheme("classic") })
 
 	req := httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+validAuthorizeQuery().Encode(), nil)
 	rec := httptest.NewRecorder()
@@ -90,10 +92,10 @@ func TestOAuthAuthorizeMissingSessionRedirectsToLogin(t *testing.T) {
 
 	require.Equal(t, http.StatusFound, rec.Code)
 	location := rec.Header().Get("Location")
-	require.True(t, strings.HasPrefix(location, "/sign-in?redirect="), location)
+	require.True(t, strings.HasPrefix(location, "/login?redirect="), location)
 }
 
-func TestOAuthAuthorizeLoggedInGETRedirectsToFrontendAuthorizePage(t *testing.T) {
+func TestOAuthAuthorizeLoggedInGETRendersConsentHTML(t *testing.T) {
 	router, _ := setupOAuthServerControllerTest(t)
 	cookieHeader := oauthServerLoginCookie(t, router, 7)
 
@@ -102,32 +104,11 @@ func TestOAuthAuthorizeLoggedInGETRedirectsToFrontendAuthorizePage(t *testing.T)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusFound, rec.Code)
-	location := rec.Header().Get("Location")
-	parsed, err := url.Parse(location)
-	require.NoError(t, err)
-	require.Equal(t, "/oauth/authorize", parsed.Path)
-	require.Equal(t, "code", parsed.Query().Get("response_type"))
-	require.Equal(t, oauthserversvc.DefaultCodexClientID, parsed.Query().Get("client_id"))
-	require.Equal(t, "http://localhost:1455/auth/callback", parsed.Query().Get("redirect_uri"))
-	require.Equal(t, "state-1", parsed.Query().Get("state"))
-	require.Equal(t, "placeholder-challenge", parsed.Query().Get("code_challenge"))
-	require.Equal(t, "S256", parsed.Query().Get("code_challenge_method"))
-}
-
-func TestOAuthAuthorizeLoggedInGETDoesNotRenderHTML(t *testing.T) {
-	router, _ := setupOAuthServerControllerTest(t)
-	cookieHeader := oauthServerLoginCookie(t, router, 7)
-
-	req := httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+validAuthorizeQuery().Encode(), nil)
-	req.Header.Set("Cookie", cookieHeader)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-
-	require.NotEqual(t, http.StatusOK, rec.Code)
+	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
-	require.NotContains(t, body, "<html")
-	require.NotContains(t, body, "Approve")
+	require.Contains(t, body, "<form method=\"post\" action=\"/oauth/authorize\">")
+	require.Contains(t, body, "Authorize")
+	require.Contains(t, body, "http://localhost:1455/auth/callback")
 }
 
 func TestOAuthAuthorizeMetaRequiresLogin(t *testing.T) {

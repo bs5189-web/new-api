@@ -169,7 +169,7 @@ func OAuthAuthorize(c *gin.Context) {
 
 	req := oauthAuthorizationRequestFromRequest(c, userID)
 	if c.Request.Method == http.MethodGet {
-		redirectToFrontendAuthorizePage(c)
+		renderOAuthAuthorize(c, req)
 		return
 	}
 
@@ -330,8 +330,9 @@ func OAuthUserInfo(c *gin.Context) {
 
 // OAuthAccount returns the Codex app-server protocol account response.
 // Codex expects the shape:
-//   { "account": { "type": "chatgpt", "email": "...", "planType": "..." },
-//     "requiresOpenaiAuth": true }
+//
+//	{ "account": { "type": "chatgpt", "email": "...", "planType": "..." },
+//	  "requiresOpenaiAuth": true }
 func OAuthAccount(c *gin.Context) {
 	info, ok := oauthUserInfoFromBearer(c)
 	if !ok {
@@ -628,21 +629,11 @@ func bearerToken(c *gin.Context) (string, bool) {
 func redirectToLogin(c *gin.Context) {
 	values := url.Values{}
 	values.Set("redirect", c.Request.URL.RequestURI())
-	c.Redirect(http.StatusFound, "/sign-in?"+values.Encode())
-}
-
-// redirectToFrontendAuthorizePage redirects the logged-in user from the backend
-// /oauth/authorize endpoint to the SPA route /oauth/authorize that renders the
-// consent screen, preserving all original query parameters. Uses a relative
-// path so the browser keeps the current host (frontend dev server in dev or
-// the same origin in production).
-func redirectToFrontendAuthorizePage(c *gin.Context) {
-	target := "/oauth/authorize"
-	if raw := c.Request.URL.RawQuery; raw != "" {
-		target += "?" + raw
+	loginPath := "/sign-in"
+	if common.GetTheme() == "classic" {
+		loginPath = "/login"
 	}
-	c.Header("Location", target)
-	c.Status(http.StatusFound)
+	c.Redirect(http.StatusFound, loginPath+"?"+values.Encode())
 }
 
 // OAuthAuthorizeMeta returns the consent-screen metadata for a logged-in user
@@ -676,16 +667,16 @@ func OAuthAuthorizeMeta(c *gin.Context) {
 	}
 
 	payload := gin.H{
-		"success":              true,
-		"client_id":            req.ClientID,
-		"client_name":          clientName,
-		"redirect_uri":         req.RedirectURI,
-		"state":                c.Request.URL.Query().Get("state"),
-		"scopes":               scopes,
-		"scope":                req.Scope,
-		"code_challenge":       req.CodeChallenge,
+		"success":               true,
+		"client_id":             req.ClientID,
+		"client_name":           clientName,
+		"redirect_uri":          req.RedirectURI,
+		"state":                 c.Request.URL.Query().Get("state"),
+		"scopes":                scopes,
+		"scope":                 req.Scope,
+		"code_challenge":        req.CodeChallenge,
 		"code_challenge_method": req.CodeChallengeMethod,
-		"nonce":                req.Nonce,
+		"nonce":                 req.Nonce,
 	}
 	c.JSON(http.StatusOK, payload)
 }

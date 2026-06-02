@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { history } from './history';
 
 export function authHeader() {
@@ -33,9 +33,10 @@ export function authHeader() {
 }
 
 export const AuthRedirect = ({ children }) => {
+  const [searchParams] = useSearchParams();
   const user = localStorage.getItem('user');
 
-  if (user) {
+  if (user && !searchParams.get('redirect')) {
     return <Navigate to='/console' replace />;
   }
 
