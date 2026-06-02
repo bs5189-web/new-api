@@ -130,6 +130,7 @@ func RegisterOAuthServerRoutes(router gin.IRouter) {
 	router.GET("/.well-known/jwks.json", OAuthJWKS)
 	router.GET("/oauth/authorize", OAuthAuthorize)
 	router.POST("/oauth/authorize", OAuthAuthorize)
+	router.GET("/api/oauth/authorize/meta", OAuthAuthorizeMeta)
 	router.POST("/oauth/token", OAuthToken)
 	router.POST("/oauth/revoke", OAuthRevoke)
 	router.POST("/oauth/introspect", OAuthIntrospect)
@@ -168,7 +169,7 @@ func OAuthAuthorize(c *gin.Context) {
 
 	req := oauthAuthorizationRequestFromRequest(c, userID)
 	if c.Request.Method == http.MethodGet {
-		renderOAuthAuthorize(c, req)
+		redirectToFrontendAuthorizePage(c)
 		return
 	}
 
@@ -612,6 +613,74 @@ func redirectToLogin(c *gin.Context) {
 	values := url.Values{}
 	values.Set("redirect", c.Request.URL.RequestURI())
 	c.Redirect(http.StatusFound, "/sign-in?"+values.Encode())
+}
+
+// redirectToFrontendAuthorizePage redirects the logged-in user from the backend
+// /oauth/authorize endpoint to the SPA route /oauth/authorize that renders the
+// consent screen, preserving all original query parameters. Uses a relative
+// path so the browser keeps the current host (frontend dev server in dev or
+// the same origin in production).
+func redirectToFrontendAuthorizePage(c *gin.Context) {
+	target := "/oauth/authorize"
+	if raw := c.Request.URL.RawQuery; raw != "" {
+		target += "?" + raw
+	}
+	c.Header("Location", target)
+	c.Status(http.StatusFound)
+}
+
+// OAuthAuthorizeMeta returns the consent-screen metadata for a logged-in user
+// to render the SPA authorize page. It does NOT issue any tokens.
+func OAuthAuthorizeMeta(c *gin.Context) {
+	userID, ok := oauthSessionUserID(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	svc, err := getOAuthServerService(c)
+	if err != nil {
+		oauthServerUnavailable(c, err)
+		return
+	}
+
+	req := oauthAuthorizationRequestFromRequest(c, userID)
+	if _, err := svc.ValidateAuthorizationRequest(c.Request.Context(), req); err != nil {
+		handleAuthorizeServiceError(c, err, req.RedirectURI, c.Request.URL.Query().Get("state"))
+		return
+	}
+
+	scopes := splitScopes(req.Scope)
+	var client model.OAuthServerClient
+	clientName := ""
+	if err := model.DB.WithContext(c.Request.Context()).
+		Where("client_id = ? AND enabled = ?", req.ClientID, true).
+		First(&client).Error; err == nil {
+		clientName = client.ClientName
+	}
+
+	payload := gin.H{
+		"success":              true,
+		"client_id":            req.ClientID,
+		"client_name":          clientName,
+		"redirect_uri":         req.RedirectURI,
+		"state":                c.Request.URL.Query().Get("state"),
+		"scopes":               scopes,
+		"scope":                req.Scope,
+		"code_challenge":       req.CodeChallenge,
+		"code_challenge_method": req.CodeChallengeMethod,
+		"nonce":                req.Nonce,
+	}
+	c.JSON(http.StatusOK, payload)
+}
+
+func splitScopes(scope string) []string {
+	scope = strings.TrimSpace(scope)
+	if scope == "" {
+		return []string{}
+	}
+	parts := strings.Fields(scope)
+	return parts
 }
 
 func handleAuthorizeServiceError(c *gin.Context, err error, redirectURI string, state string) {

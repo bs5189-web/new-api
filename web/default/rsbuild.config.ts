@@ -14,12 +14,21 @@ export default defineConfig(({ envMode }) => {
     'http://localhost:3000'
 
   const isProd = envMode === 'production'
-  const devProxy = Object.fromEntries(
-    (['/api', '/mj', '/pg'] as const).map((key) => [
+  // /oauth/authorize is the SPA consent page: GET is served by the SPA shell,
+  // non-GET (decision POST) is proxied to the backend.
+  const oauthAuthorizeProxy = {
+    target: serverUrl,
+    changeOrigin: true,
+    bypass: (req: { method?: string }) =>
+      req.method === 'GET' || req.method === 'HEAD' ? req.url : undefined,
+  }
+  const devProxy: Record<string, unknown> = Object.fromEntries(
+    (['/api', '/mj', '/pg', '/.well-known'] as const).map((key) => [
       key,
       { target: serverUrl, changeOrigin: true },
     ]),
-  ) as Record<string, { target: string; changeOrigin: boolean }>
+  )
+  devProxy['/oauth'] = oauthAuthorizeProxy
 
   return {
     plugins: [pluginReact()],
