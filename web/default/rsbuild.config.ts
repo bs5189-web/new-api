@@ -15,15 +15,22 @@ export default defineConfig(({ envMode }) => {
 
   const isProd = envMode === 'production'
   // /oauth/authorize is the SPA consent page: GET is served by the SPA shell,
-  // non-GET (decision POST) is proxied to the backend.
+  // non-GET (decision POST) is proxied to the backend. Other /oauth/* paths
+  // (token, userinfo, jwks, .well-known) are always proxied.
   const oauthAuthorizeProxy = {
     target: serverUrl,
     changeOrigin: true,
-    bypass: (req: { method?: string }) =>
-      req.method === 'GET' || req.method === 'HEAD' ? req.url : undefined,
+    bypass: (req: { method?: string; url?: string }) => {
+      if (!req.url) return undefined
+      const path = req.url.split('?')[0]
+      const isAuthorize = path === '/oauth/authorize'
+      if (!isAuthorize) return undefined
+      if (req.method === 'GET' || req.method === 'HEAD') return req.url
+      return undefined
+    },
   }
   const devProxy: Record<string, unknown> = Object.fromEntries(
-    (['/api', '/mj', '/pg', '/.well-known'] as const).map((key) => [
+    (['/api', '/mj', '/pg', '/.well-known', '/account'] as const).map((key) => [
       key,
       { target: serverUrl, changeOrigin: true },
     ]),

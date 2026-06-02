@@ -387,3 +387,85 @@ func oauthServerControllerPKCEPair(t *testing.T, verifier string) (string, strin
 	sum := sha256.Sum256([]byte(verifier))
 	return verifier, base64.RawURLEncoding.EncodeToString(sum[:])
 }
+
+func oauthServerIssueAccessToken(t *testing.T, router *gin.Engine, userID int) string {
+	t.Helper()
+
+	cookieHeader := oauthServerLoginCookie(t, router, userID)
+	verifier, challenge := oauthServerControllerPKCEPair(t, "account verifier")
+
+	form := validAuthorizeQuery()
+	form.Set("code_challenge", challenge)
+	form.Set("decision", "approve")
+	req := httptest.NewRequest(http.MethodPost, "/oauth/authorize", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Cookie", cookieHeader)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusFound, rec.Code)
+	callback, err := url.Parse(rec.Header().Get("Location"))
+	require.NoError(t, err)
+	code := callback.Query().Get("code")
+	require.NotEmpty(t, code)
+
+	tokenForm := url.Values{}
+	tokenForm.Set("grant_type", "authorization_code")
+	tokenForm.Set("client_id", oauthserversvc.DefaultCodexClientID)
+	tokenForm.Set("code", code)
+	tokenForm.Set("redirect_uri", "http://localhost:1455/auth/callback")
+	tokenForm.Set("code_verifier", verifier)
+	tokenReq := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(tokenForm.Encode()))
+	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	tokenRec := httptest.NewRecorder()
+	router.ServeHTTP(tokenRec, tokenReq)
+	require.Equal(t, http.StatusOK, tokenRec.Code)
+	var tokenPayload map[string]any
+	require.NoError(t, common.Unmarshal(tokenRec.Body.Bytes(), &tokenPayload))
+	accessToken, _ := tokenPayload["access_token"].(string)
+	require.NotEmpty(t, accessToken)
+	return accessToken
+}
+
+func TestOAuthAccountReturnsCodexChatgptEnvelopeWhenEmailPresent(t *testing.T) {
+	router, _ := setupOAuthServerControllerTest(t)
+	accessToken := oauthServerIssueAccessToken(t, router, 7)
+
+	req := httptest.NewRequest(http.MethodGet, "/account", nil)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var payload map[string]any
+	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &payload))
+	require.Equal(t, true, payload["requiresOpenaiAuth"])
+	account, ok := payload["account"].(map[string]any)
+	require.True(t, ok, "account must be an object")
+	require.Equal(t, "chatgpt", account["type"])
+	require.Equal(t, "ada@example.com", account["email"])
+	require.Equal(t, "pro", account["planType"], "planType is required for chatgpt auth")
+}
+
+func TestOAuthAccountAlwaysReturnsChatgptWithFallbackEmail(t *testing.T) {
+	router, _ := setupOAuthServerControllerTest(t)
+	// Replace the seeded user with one that has no email; the response
+	// must still advertise a chatgpt account with a non-empty email and
+	// the default pro planType so Codex can complete TUI bootstrap.
+	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", 7).
+		Update("email", "").Error)
+	accessToken := oauthServerIssueAccessToken(t, router, 7)
+
+	req := httptest.NewRequest(http.MethodGet, "/account", nil)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var payload map[string]any
+	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &payload))
+	account, ok := payload["account"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "chatgpt", account["type"], "must always be chatgpt for OAuth tokens")
+	require.NotEmpty(t, account["email"], "fallback email must be non-empty")
+	require.Equal(t, "pro", account["planType"])
+}

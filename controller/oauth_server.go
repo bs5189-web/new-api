@@ -328,16 +328,32 @@ func OAuthUserInfo(c *gin.Context) {
 	})
 }
 
+// OAuthAccount returns the Codex app-server protocol account response.
+// Codex expects the shape:
+//   { "account": { "type": "chatgpt", "email": "...", "planType": "..." },
+//     "requiresOpenaiAuth": true }
 func OAuthAccount(c *gin.Context) {
 	info, ok := oauthUserInfoFromBearer(c)
 	if !ok {
 		return
 	}
+
+	email := strings.TrimSpace(info.Email)
+	if email == "" {
+		if username := strings.TrimSpace(info.PreferredUsername); username != "" {
+			email = username + "@localhost"
+		} else {
+			email = "user-" + info.Subject + "@localhost"
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"id":         info.CodexAccountID,
-		"account_id": info.CodexAccountID,
-		"email":      info.Email,
-		"name":       info.Name,
+		"account": gin.H{
+			"type":     "chatgpt",
+			"email":    email,
+			"planType": "pro",
+		},
+		"requiresOpenaiAuth": true,
 	})
 }
 
