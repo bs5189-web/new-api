@@ -157,6 +157,7 @@ type UserInfoResult struct {
 	Name              string
 	PreferredUsername string
 	CodexAccountID    string
+	CodexPlanType     string
 }
 
 type UserGrantResult struct {
@@ -620,6 +621,7 @@ func (s *Service) UserInfo(ctx context.Context, token string) (*UserInfoResult, 
 	result := &UserInfoResult{
 		Subject:        strconv.Itoa(user.Id),
 		CodexAccountID: stableCodexAccountID(user.Id),
+		CodexPlanType:  CodexDefaultPlanType,
 	}
 	if containsString(scopes, "email") {
 		result.Email = oauthEmail(user)

@@ -193,6 +193,7 @@ func TestJWTAndUserInfoRespectProfileScopes(t *testing.T) {
 	require.Empty(t, info.Name)
 	require.Empty(t, info.PreferredUsername)
 	require.Equal(t, "user-7", info.CodexAccountID)
+	require.Equal(t, CodexDefaultPlanType, info.CodexPlanType)
 }
 
 func TestUserInfoRejectsTokenWithoutOpenIDScope(t *testing.T) {

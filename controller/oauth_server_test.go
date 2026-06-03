@@ -302,6 +302,59 @@ func TestOAuthTokenAndUserInfoFlow(t *testing.T) {
 	require.Equal(t, "pro", codexClaims["chatgpt_plan_type"])
 }
 
+func TestOAuthTokenAcceptsJSONRefreshRequest(t *testing.T) {
+	router, _ := setupOAuthServerControllerTest(t)
+	cookieHeader := oauthServerLoginCookie(t, router, 7)
+	verifier, challenge := oauthServerControllerPKCEPair(t, "json refresh verifier")
+
+	form := validAuthorizeQuery()
+	form.Set("code_challenge", challenge)
+	form.Set("decision", "approve")
+	req := httptest.NewRequest(http.MethodPost, "/oauth/authorize", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Cookie", cookieHeader)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusFound, rec.Code)
+	callback, err := url.Parse(rec.Header().Get("Location"))
+	require.NoError(t, err)
+
+	tokenForm := url.Values{}
+	tokenForm.Set("grant_type", "authorization_code")
+	tokenForm.Set("client_id", oauthserversvc.DefaultCodexClientID)
+	tokenForm.Set("code", callback.Query().Get("code"))
+	tokenForm.Set("redirect_uri", "http://localhost:1455/auth/callback")
+	tokenForm.Set("code_verifier", verifier)
+	tokenReq := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(tokenForm.Encode()))
+	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	tokenRec := httptest.NewRecorder()
+	router.ServeHTTP(tokenRec, tokenReq)
+	require.Equal(t, http.StatusOK, tokenRec.Code)
+
+	var tokenPayload map[string]any
+	require.NoError(t, common.Unmarshal(tokenRec.Body.Bytes(), &tokenPayload))
+	refreshToken, _ := tokenPayload["refresh_token"].(string)
+	require.NotEmpty(t, refreshToken)
+
+	refreshBody, err := common.Marshal(map[string]string{
+		"grant_type":    "refresh_token",
+		"client_id":     oauthserversvc.DefaultCodexClientID,
+		"refresh_token": refreshToken,
+	})
+	require.NoError(t, err)
+	refreshReq := httptest.NewRequest(http.MethodPost, "/oauth/token", bytes.NewReader(refreshBody))
+	refreshReq.Header.Set("Content-Type", "application/json")
+	refreshRec := httptest.NewRecorder()
+	router.ServeHTTP(refreshRec, refreshReq)
+
+	require.Equal(t, http.StatusOK, refreshRec.Code)
+	var refreshPayload map[string]any
+	require.NoError(t, common.Unmarshal(refreshRec.Body.Bytes(), &refreshPayload))
+	require.NotEmpty(t, refreshPayload["access_token"])
+	require.NotEmpty(t, refreshPayload["refresh_token"])
+	require.Equal(t, "Bearer", refreshPayload["token_type"])
+}
+
 func TestOAuthDiscoveryAndJWKS(t *testing.T) {
 	router, _ := setupOAuthServerControllerTest(t)
 

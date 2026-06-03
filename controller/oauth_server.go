@@ -47,6 +47,16 @@ type oauthErrorPayload struct {
 	State            string `json:"state,omitempty"`
 }
 
+type oauthTokenRequestPayload struct {
+	GrantType    string `json:"grant_type"`
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
+	Code         string `json:"code"`
+	RedirectURI  string `json:"redirect_uri"`
+	CodeVerifier string `json:"code_verifier"`
+	RefreshToken string `json:"refresh_token"`
+}
+
 type oauthServerUserGrantPayload struct {
 	ID         int        `json:"id"`
 	ClientID   string     `json:"client_id"`
@@ -204,12 +214,13 @@ func OAuthAuthorize(c *gin.Context) {
 }
 
 func OAuthToken(c *gin.Context) {
-	if err := c.Request.ParseForm(); err != nil {
+	req, err := parseOAuthTokenRequest(c)
+	if err != nil {
 		oauthJSONError(c, http.StatusBadRequest, "invalid_request", "Invalid form body.")
 		return
 	}
-	clientID, clientSecret := oauthClientCredentials(c)
-	grantType := strings.TrimSpace(c.PostForm("grant_type"))
+	clientID, clientSecret := oauthClientCredentialsForValues(c, req.ClientID, req.ClientSecret)
+	grantType := strings.TrimSpace(req.GrantType)
 
 	svc, err := getOAuthServerService(c)
 	if err != nil {
@@ -223,15 +234,15 @@ func OAuthToken(c *gin.Context) {
 		token, err = svc.ExchangeAuthorizationCode(c.Request.Context(), oauthserversvc.AuthorizationCodeTokenRequest{
 			ClientID:     clientID,
 			ClientSecret: clientSecret,
-			Code:         c.PostForm("code"),
-			RedirectURI:  c.PostForm("redirect_uri"),
-			CodeVerifier: c.PostForm("code_verifier"),
+			Code:         req.Code,
+			RedirectURI:  req.RedirectURI,
+			CodeVerifier: req.CodeVerifier,
 		})
 	case "refresh_token":
 		token, err = svc.Refresh(c.Request.Context(), oauthserversvc.RefreshTokenRequest{
 			ClientID:     clientID,
 			ClientSecret: clientSecret,
-			RefreshToken: c.PostForm("refresh_token"),
+			RefreshToken: req.RefreshToken,
 		})
 	default:
 		oauthJSONError(c, http.StatusBadRequest, "unsupported_grant_type", "Unsupported grant_type.")
@@ -328,7 +339,7 @@ func OAuthUserInfo(c *gin.Context) {
 		"preferred_username": info.PreferredUsername,
 		oauthserversvc.CodexClaimNamespace: gin.H{
 			"chatgpt_account_id": info.CodexAccountID,
-			"chatgpt_plan_type":  oauthserversvc.CodexDefaultPlanType,
+			"chatgpt_plan_type":  oauthCodexPlanType(info),
 		},
 	})
 }
@@ -375,7 +386,7 @@ func OAuthAccount(c *gin.Context) {
 		"account": gin.H{
 			"type":     "chatgpt",
 			"email":    email,
-			"planType": oauthserversvc.CodexDefaultPlanType,
+			"planType": oauthCodexPlanType(info),
 		},
 		"requiresOpenaiAuth": true,
 	})
@@ -588,6 +599,28 @@ func oauthAuthorizationRequestFromRequest(c *gin.Context, userID int) oauthserve
 	}
 }
 
+func parseOAuthTokenRequest(c *gin.Context) (oauthTokenRequestPayload, error) {
+	if c.ContentType() == "application/json" {
+		var req oauthTokenRequestPayload
+		if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+			return oauthTokenRequestPayload{}, err
+		}
+		return req, nil
+	}
+	if err := c.Request.ParseForm(); err != nil {
+		return oauthTokenRequestPayload{}, err
+	}
+	return oauthTokenRequestPayload{
+		GrantType:    c.PostForm("grant_type"),
+		ClientID:     c.PostForm("client_id"),
+		ClientSecret: c.PostForm("client_secret"),
+		Code:         c.PostForm("code"),
+		RedirectURI:  c.PostForm("redirect_uri"),
+		CodeVerifier: c.PostForm("code_verifier"),
+		RefreshToken: c.PostForm("refresh_token"),
+	}, nil
+}
+
 func oauthSessionUserID(c *gin.Context) (int, bool) {
 	id := sessions.Default(c).Get("id")
 	switch v := id.(type) {
@@ -603,8 +636,12 @@ func oauthSessionUserID(c *gin.Context) (int, bool) {
 }
 
 func oauthClientCredentials(c *gin.Context) (string, string) {
-	clientID := strings.TrimSpace(c.PostForm("client_id"))
-	clientSecret := strings.TrimSpace(c.PostForm("client_secret"))
+	return oauthClientCredentialsForValues(c, c.PostForm("client_id"), c.PostForm("client_secret"))
+}
+
+func oauthClientCredentialsForValues(c *gin.Context, rawClientID string, rawClientSecret string) (string, string) {
+	clientID := strings.TrimSpace(rawClientID)
+	clientSecret := strings.TrimSpace(rawClientSecret)
 	auth := strings.TrimSpace(c.GetHeader("Authorization"))
 	if !strings.HasPrefix(strings.ToLower(auth), "basic ") {
 		return clientID, clientSecret
@@ -618,6 +655,15 @@ func oauthClientCredentials(c *gin.Context) (string, string) {
 		return clientID, clientSecret
 	}
 	return parts[0], parts[1]
+}
+
+func oauthCodexPlanType(info *oauthserversvc.UserInfoResult) string {
+	if info != nil {
+		if planType := strings.TrimSpace(info.CodexPlanType); planType != "" {
+			return planType
+		}
+	}
+	return oauthserversvc.CodexDefaultPlanType
 }
 
 func oauthUserInfoFromBearer(c *gin.Context) (*oauthserversvc.UserInfoResult, bool) {
@@ -675,7 +721,7 @@ func logOAuthAccountSuccess(c *gin.Context, info *oauthserversvc.UserInfoResult,
 		info.Subject,
 		email,
 		info.CodexAccountID,
-		oauthserversvc.CodexDefaultPlanType,
+		oauthCodexPlanType(info),
 	))
 }
 
