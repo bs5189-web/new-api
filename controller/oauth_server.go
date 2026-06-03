@@ -1,8 +1,11 @@
 package controller
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"html/template"
 	"net/http"
 	"net/url"
@@ -12,6 +15,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	oauthserversvc "github.com/QuantumNous/new-api/service/oauthserver"
 	"github.com/QuantumNous/new-api/setting/system_setting"
@@ -335,8 +339,26 @@ func OAuthUserInfo(c *gin.Context) {
 //	{ "account": { "type": "chatgpt", "email": "...", "planType": "..." },
 //	  "requiresOpenaiAuth": true }
 func OAuthAccount(c *gin.Context) {
-	info, ok := oauthUserInfoFromBearer(c)
+	token, ok := bearerToken(c)
+	logOAuthAccountRequest(c, token)
 	if !ok {
+		c.Header("WWW-Authenticate", `Bearer error="invalid_token"`)
+		logOAuthAccountFailure(c, http.StatusUnauthorized, "missing_bearer_token", "")
+		oauthJSONError(c, http.StatusUnauthorized, "invalid_token", "Missing bearer token.")
+		return
+	}
+
+	svc, err := getOAuthServerService(c)
+	if err != nil {
+		logOAuthAccountFailure(c, http.StatusServiceUnavailable, "oauth_server_unavailable", err.Error())
+		oauthServerUnavailable(c, err)
+		return
+	}
+	info, err := svc.UserInfo(c.Request.Context(), token)
+	if err != nil {
+		c.Header("WWW-Authenticate", `Bearer error="invalid_token"`)
+		logOAuthAccountFailure(c, http.StatusUnauthorized, "invalid_bearer_token", err.Error())
+		oauthJSONError(c, http.StatusUnauthorized, "invalid_token", "Invalid bearer token.")
 		return
 	}
 
@@ -357,6 +379,7 @@ func OAuthAccount(c *gin.Context) {
 		},
 		"requiresOpenaiAuth": true,
 	})
+	logOAuthAccountSuccess(c, info, email)
 }
 
 func ListOAuthServerUserGrants(c *gin.Context) {
@@ -625,6 +648,61 @@ func bearerToken(c *gin.Context) (string, bool) {
 	}
 	token := strings.TrimSpace(auth[len("Bearer "):])
 	return token, token != ""
+}
+
+func logOAuthAccountRequest(c *gin.Context, token string) {
+	auth := strings.TrimSpace(c.GetHeader("Authorization"))
+	authScheme := "none"
+	if fields := strings.Fields(auth); len(fields) > 0 {
+		authScheme = strings.ToLower(fields[0])
+	}
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf(
+		"Codex account/read request method=%s path=%q client_ip=%s user_agent=%q auth_present=%t auth_scheme=%s token_sha256_prefix=%s",
+		c.Request.Method,
+		c.Request.RequestURI,
+		c.ClientIP(),
+		c.Request.UserAgent(),
+		token != "",
+		authScheme,
+		oauthAccountTokenFingerprint(token),
+	))
+}
+
+func logOAuthAccountSuccess(c *gin.Context, info *oauthserversvc.UserInfoResult, email string) {
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf(
+		"Codex account/read response status=%d subject=%q email=%q account_id=%q plan_type=%q requires_openai_auth=true",
+		http.StatusOK,
+		info.Subject,
+		email,
+		info.CodexAccountID,
+		oauthserversvc.CodexDefaultPlanType,
+	))
+}
+
+func logOAuthAccountFailure(c *gin.Context, status int, code string, detail string) {
+	if strings.TrimSpace(detail) != "" {
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf(
+			"Codex account/read response status=%d error=%q detail=%q",
+			status,
+			code,
+			detail,
+		))
+		return
+	}
+	logger.LogWarn(c.Request.Context(), fmt.Sprintf(
+		"Codex account/read response status=%d error=%q",
+		status,
+		code,
+	))
+}
+
+func oauthAccountTokenFingerprint(token string) string {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return "none"
+	}
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])[:12]
 }
 
 func redirectToLogin(c *gin.Context) {

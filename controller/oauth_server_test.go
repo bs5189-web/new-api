@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -374,6 +375,24 @@ func oauthServerControllerPKCEPair(t *testing.T, verifier string) (string, strin
 	return verifier, base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
+func captureOAuthServerControllerLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var logs bytes.Buffer
+	common.LogWriterMu.Lock()
+	oldWriter := gin.DefaultWriter
+	oldErrorWriter := gin.DefaultErrorWriter
+	gin.DefaultWriter = &logs
+	gin.DefaultErrorWriter = &logs
+	common.LogWriterMu.Unlock()
+	t.Cleanup(func() {
+		common.LogWriterMu.Lock()
+		gin.DefaultWriter = oldWriter
+		gin.DefaultErrorWriter = oldErrorWriter
+		common.LogWriterMu.Unlock()
+	})
+	return &logs
+}
+
 func oauthServerIssueAccessToken(t *testing.T, router *gin.Engine, userID int) string {
 	t.Helper()
 
@@ -454,4 +473,63 @@ func TestOAuthAccountAlwaysReturnsChatgptWithFallbackEmail(t *testing.T) {
 	require.Equal(t, "chatgpt", account["type"], "must always be chatgpt for OAuth tokens")
 	require.NotEmpty(t, account["email"], "fallback email must be non-empty")
 	require.Equal(t, "pro", account["planType"])
+}
+
+func TestOAuthAccountLogsRequestAndResponseWithoutBearerSecret(t *testing.T) {
+	router, _ := setupOAuthServerControllerTest(t)
+	accessToken := oauthServerIssueAccessToken(t, router, 7)
+	logs := captureOAuthServerControllerLogs(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/account", nil)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	logText := logs.String()
+	require.Contains(t, logText, "Codex account/read request")
+	require.Contains(t, logText, "auth_present=true")
+	require.Contains(t, logText, "auth_scheme=bearer")
+	require.Contains(t, logText, "token_sha256_prefix=")
+	require.Contains(t, logText, "Codex account/read response status=200")
+	require.Contains(t, logText, "email=\"ada@example.com\"")
+	require.Contains(t, logText, "plan_type=\"pro\"")
+	require.NotContains(t, logText, accessToken)
+}
+
+func TestOAuthAccountLogsMissingBearerFailure(t *testing.T) {
+	router, _ := setupOAuthServerControllerTest(t)
+	logs := captureOAuthServerControllerLogs(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/account", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	logText := logs.String()
+	require.Contains(t, logText, "Codex account/read request")
+	require.Contains(t, logText, "auth_present=false")
+	require.Contains(t, logText, "Codex account/read response status=401")
+	require.Contains(t, logText, "error=\"missing_bearer_token\"")
+}
+
+func TestOAuthAccountLogsInvalidBearerFailureWithoutBearerSecret(t *testing.T) {
+	router, _ := setupOAuthServerControllerTest(t)
+	logs := captureOAuthServerControllerLogs(t)
+	invalidToken := "invalid-secret-token"
+
+	req := httptest.NewRequest(http.MethodGet, "/account", nil)
+	req.Header.Set("Authorization", "Bearer "+invalidToken)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	logText := logs.String()
+	require.Contains(t, logText, "Codex account/read request")
+	require.Contains(t, logText, "auth_present=true")
+	require.Contains(t, logText, "auth_scheme=bearer")
+	require.Contains(t, logText, "token_sha256_prefix=")
+	require.Contains(t, logText, "Codex account/read response status=401")
+	require.Contains(t, logText, "error=\"invalid_bearer_token\"")
+	require.NotContains(t, logText, invalidToken)
 }
