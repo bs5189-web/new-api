@@ -100,6 +100,14 @@ func TestAuthorizationCodeExchangeIssuesJWTAndRefreshToken(t *testing.T) {
 	codexClaims, ok := claims[CodexClaimNamespace].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, "user-7", codexClaims["chatgpt_account_id"])
+	require.Equal(t, "pro", codexClaims["chatgpt_plan_type"])
+
+	idClaims := parseAndVerifyAccessToken(t, key, tokens.IDToken)
+	require.Equal(t, "ada@example.com", idClaims["email"])
+	idCodexClaims, ok := idClaims[CodexClaimNamespace].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "user-7", idCodexClaims["chatgpt_account_id"])
+	require.Equal(t, "pro", idCodexClaims["chatgpt_plan_type"])
 
 	jwks := svc.JWKS()
 	require.Len(t, jwks.Keys, 1)

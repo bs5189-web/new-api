@@ -295,6 +295,10 @@ func TestOAuthTokenAndUserInfoFlow(t *testing.T) {
 	require.Equal(t, "7", userPayload["sub"])
 	require.Equal(t, "ada@example.com", userPayload["email"])
 	require.Equal(t, "Ada Lovelace", userPayload["name"])
+	codexClaims, ok := userPayload[oauthserversvc.CodexClaimNamespace].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "user-7", codexClaims["chatgpt_account_id"])
+	require.Equal(t, "pro", codexClaims["chatgpt_plan_type"])
 }
 
 func TestOAuthDiscoveryAndJWKS(t *testing.T) {

@@ -28,6 +28,7 @@ const (
 	DefaultCodexClientID   = "app_EMoamEEZ73f0CkXaXp7hrann"
 	DefaultCodexClientName = "Codex CLI"
 	CodexClaimNamespace    = "https://api.openai.com/auth"
+	CodexDefaultPlanType   = "pro"
 	ScopeConnectorsInvoke  = "api.connectors.invoke"
 
 	TokenTypeBearer  = "Bearer"
@@ -183,6 +184,7 @@ type JWK struct {
 
 type codexAuthClaims struct {
 	ChatGPTAccountID string `json:"chatgpt_account_id"`
+	ChatGPTPlanType  string `json:"chatgpt_plan_type"`
 }
 
 type oauthJWTClaims struct {
@@ -730,7 +732,7 @@ func (s *Service) issueAccessAndIDTokens(tx *gorm.DB, user *model.User, clientID
 		if err != nil {
 			return nil, err
 		}
-		idToken, err = s.signJWT(user, clientID, scopes, nonce, idJTI, now, now.Add(s.idTokenTTL), false)
+		idToken, err = s.signJWT(user, clientID, scopes, nonce, idJTI, now, now.Add(s.idTokenTTL), true)
 		if err != nil {
 			return nil, err
 		}
@@ -789,7 +791,10 @@ func (s *Service) signJWT(user *model.User, clientID string, scopes []string, no
 		claims.PreferredUsername = strings.TrimSpace(user.Username)
 	}
 	if includeCodexClaims {
-		claims.CodexAuth = &codexAuthClaims{ChatGPTAccountID: stableCodexAccountID(user.Id)}
+		claims.CodexAuth = &codexAuthClaims{
+			ChatGPTAccountID: stableCodexAccountID(user.Id),
+			ChatGPTPlanType:  CodexDefaultPlanType,
+		}
 	}
 	if strings.TrimSpace(nonce) != "" {
 		claims.Nonce = strings.TrimSpace(nonce)

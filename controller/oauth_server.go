@@ -324,6 +324,7 @@ func OAuthUserInfo(c *gin.Context) {
 		"preferred_username": info.PreferredUsername,
 		oauthserversvc.CodexClaimNamespace: gin.H{
 			"chatgpt_account_id": info.CodexAccountID,
+			"chatgpt_plan_type":  oauthserversvc.CodexDefaultPlanType,
 		},
 	})
 }
@@ -352,7 +353,7 @@ func OAuthAccount(c *gin.Context) {
 		"account": gin.H{
 			"type":     "chatgpt",
 			"email":    email,
-			"planType": "pro",
+			"planType": oauthserversvc.CodexDefaultPlanType,
 		},
 		"requiresOpenaiAuth": true,
 	})
