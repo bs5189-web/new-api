@@ -622,7 +622,7 @@ func (s *Service) UserInfo(ctx context.Context, token string) (*UserInfoResult, 
 		CodexAccountID: stableCodexAccountID(user.Id),
 	}
 	if containsString(scopes, "email") {
-		result.Email = strings.TrimSpace(user.Email)
+		result.Email = oauthEmail(user)
 	}
 	if containsString(scopes, "profile") {
 		result.Name = name
@@ -784,7 +784,7 @@ func (s *Service) signJWT(user *model.User, clientID string, scopes []string, no
 		},
 	}
 	if containsString(scopes, "email") {
-		claims.Email = strings.TrimSpace(user.Email)
+		claims.Email = oauthEmail(user)
 	}
 	if containsString(scopes, "profile") {
 		claims.Name = name
@@ -1010,6 +1010,18 @@ func tokenHash(token string) string {
 
 func stableCodexAccountID(userID int) string {
 	return "user-" + strconv.Itoa(userID)
+}
+
+func oauthEmail(user *model.User) string {
+	email := strings.TrimSpace(user.Email)
+	if email != "" {
+		return email
+	}
+	username := strings.TrimSpace(user.Username)
+	if username != "" {
+		return username + "@localhost"
+	}
+	return stableCodexAccountID(user.Id) + "@localhost"
 }
 
 func (s *Service) randomToken(prefix string) (string, error) {

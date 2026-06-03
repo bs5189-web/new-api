@@ -124,6 +124,39 @@ func TestAuthorizationCodeExchangeIssuesJWTAndRefreshToken(t *testing.T) {
 	require.Equal(t, DefaultCodexClientID, introspection.Audience)
 }
 
+func TestAuthorizationCodeExchangeUsesFallbackEmailWhenUserEmailMissing(t *testing.T) {
+	db, svc, key, _ := setupOAuthServerServiceTest(t)
+	require.NoError(t, db.Model(&model.User{}).Where("id = ?", 7).Update("email", "").Error)
+	verifier, challenge := testPKCEPair(t, "missing email verifier")
+
+	code, err := svc.CreateAuthorizationCode(context.Background(), AuthorizationRequest{
+		UserID:              7,
+		ClientID:            DefaultCodexClientID,
+		RedirectURI:         "http://localhost:1455/auth/callback",
+		Scope:               "openid profile email offline_access api.connectors.invoke",
+		CodeChallenge:       challenge,
+		CodeChallengeMethod: "S256",
+	})
+	require.NoError(t, err)
+
+	tokens, err := svc.ExchangeAuthorizationCode(context.Background(), AuthorizationCodeTokenRequest{
+		ClientID:     DefaultCodexClientID,
+		Code:         code.Code,
+		RedirectURI:  "http://localhost:1455/auth/callback",
+		CodeVerifier: verifier,
+	})
+	require.NoError(t, err)
+
+	claims := parseAndVerifyAccessToken(t, key, tokens.AccessToken)
+	require.Equal(t, "ada@localhost", claims["email"])
+	idClaims := parseAndVerifyAccessToken(t, key, tokens.IDToken)
+	require.Equal(t, "ada@localhost", idClaims["email"])
+
+	info, err := svc.UserInfo(context.Background(), tokens.AccessToken)
+	require.NoError(t, err)
+	require.Equal(t, "ada@localhost", info.Email)
+}
+
 func TestJWTAndUserInfoRespectProfileScopes(t *testing.T) {
 	_, svc, key, _ := setupOAuthServerServiceTest(t)
 	verifier, challenge := testPKCEPair(t, "scoped verifier")
