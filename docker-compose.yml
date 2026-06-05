@@ -30,6 +30,7 @@ services:
     environment:
       - OAUTH_SERVER_ISSUER=http://localhost:3000
       - OAUTH_SERVER_SIGNING_PRIVATE_KEY_FILE=/data/oauth_signing_key.pem
+      - DOWNLOADS_DIR=/data/downloads
       - SESSION_SECRET=12306
       - SQL_DSN=postgresql://root:123456@postgres:5432/new-api # ⚠️ IMPORTANT: Change the password in production!
       #      - SQL_DSN=root:123456@tcp(mysql:3306)/new-api  # Point to the mysql service, uncomment if using MySQL
