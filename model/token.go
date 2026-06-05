@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/bytedance/gopkg/util/gopool"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type Token struct {
@@ -382,7 +383,8 @@ func GetOrCreateNamedUserToken(userID int, name string) (*Token, error) {
 	}
 
 	var token Token
-	err := DB.Unscoped().Where(&Token{UserId: userID, Name: name}).Order("id asc").First(&token).Error
+	err := DB.Unscoped().Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}).
+		Where(&Token{UserId: userID, Name: name}).Order("id asc").First(&token).Error
 	if err == nil {
 		updates := map[string]interface{}{}
 		if token.DeletedAt.Valid {
