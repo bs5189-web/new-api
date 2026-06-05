@@ -33,7 +33,7 @@ export const RUIZHI_DOWNLOADS: RuizhiDownload[] = [
     title: 'Windows x86',
     platform: 'Windows',
     architecture: 'x86',
-    filename: 'ruizhi-windows-x86.exe',
+    filename: 'ruizhi-0.2.3-windows-x86.exe',
     href: `${RUIZHI_DOWNLOAD_BASE_PATH}/ruizhi-windows-x86.exe`,
   },
   {
@@ -41,7 +41,7 @@ export const RUIZHI_DOWNLOADS: RuizhiDownload[] = [
     title: 'macOS x86',
     platform: 'macOS',
     architecture: 'Intel x86',
-    filename: 'ruizhi-macos-x64.dmg',
+    filename: 'ruizhi-0.2.3-macos-x64.dmg',
     href: `${RUIZHI_DOWNLOAD_BASE_PATH}/ruizhi-macos-x64.dmg`,
   },
   {

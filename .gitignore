@@ -4,6 +4,10 @@
 .history
 upload
 *.exe
+web/default/public/downloads/ruizhi/*
+web/classic/public/downloads/ruizhi/*
+!web/default/public/downloads/ruizhi/.gitkeep
+!web/classic/public/downloads/ruizhi/.gitkeep
 *.db
 build
 *.db-journal

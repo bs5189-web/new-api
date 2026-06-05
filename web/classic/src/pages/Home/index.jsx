@@ -37,6 +37,7 @@ import {
   IconPlay,
   IconFile,
   IconCopy,
+  IconDownload,
 } from '@douyinfe/semi-icons';
 import { Link } from 'react-router-dom';
 import NoticeModal from '../../components/layout/NoticeModal';
@@ -64,6 +65,17 @@ import {
 } from '@lobehub/icons';
 
 const { Text } = Typography;
+
+const RUIZHI_DOWNLOADS = [
+  {
+    label: '下载锐智 Windows x86 版',
+    href: '/downloads/ruizhi/ruizhi-windows-x86.exe',
+  },
+  {
+    label: '下载锐智 macOS x86 版',
+    href: '/downloads/ruizhi/ruizhi-macos-x64.dmg',
+  },
+];
 
 const Home = () => {
   const { t, i18n } = useTranslation();
@@ -261,6 +273,26 @@ const Home = () => {
                     >
                       {t('支持众多的大模型供应商')}
                     </Text>
+                  </div>
+                  <div className='mb-6 md:mb-8 flex flex-col items-center justify-center gap-3 px-4 text-center'>
+                    <Text type='tertiary' className='text-sm md:text-base'>
+                      {t('锐智桌面端安装包')}
+                    </Text>
+                    <div className='flex flex-wrap items-center justify-center gap-3'>
+                      {RUIZHI_DOWNLOADS.map((item) => (
+                        <Button
+                          key={item.href}
+                          theme='solid'
+                          type='primary'
+                          size={isMobile ? 'default' : 'large'}
+                          className='!rounded-3xl px-6 py-2'
+                          icon={<IconDownload />}
+                          onClick={() => window.open(item.href)}
+                        >
+                          {t(item.label)}
+                        </Button>
+                      ))}
+                    </div>
                   </div>
                   <div className='flex flex-wrap items-center justify-center gap-3 sm:gap-4 md:gap-6 lg:gap-8 max-w-5xl mx-auto px-4'>
                     <div className='w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 flex items-center justify-center'>
