@@ -75,6 +75,10 @@ const RUIZHI_DOWNLOADS = [
     label: '下载锐智 macOS x86 版',
     href: '/downloads/ruizhi/ruizhi-macos-x64.dmg',
   },
+  {
+    label: '下载锐智 macOS 苹果芯片版',
+    href: '/downloads/ruizhi/ruizhi-macos-arm64.dmg',
+  },
 ];
 
 const Home = () => {
