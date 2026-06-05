@@ -1,0 +1,4 @@
+# Put Ruizhi installer files in this directory before release:
+# - ruizhi-windows-x86.exe
+# - ruizhi-macos-x64.dmg
+# - ruizhi-macos-arm64.dmg
