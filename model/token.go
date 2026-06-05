@@ -375,6 +375,63 @@ func GetOrCreateOAuthRelayToken(userID int, clientID string, clientName string) 
 	return &token, nil
 }
 
+func GetOrCreateNamedUserToken(userID int, name string) (*Token, error) {
+	name = strings.TrimSpace(name)
+	if userID <= 0 || name == "" {
+		return nil, errors.New("invalid token owner or name")
+	}
+
+	var token Token
+	err := DB.Unscoped().Where(&Token{UserId: userID, Name: name}).Order("id asc").First(&token).Error
+	if err == nil {
+		updates := map[string]interface{}{}
+		if token.DeletedAt.Valid {
+			updates["deleted_at"] = nil
+		}
+		if token.Status != common.TokenStatusEnabled {
+			updates["status"] = common.TokenStatusEnabled
+		}
+		if token.ExpiredTime != -1 {
+			updates["expired_time"] = -1
+		}
+		if !token.UnlimitedQuota {
+			updates["unlimited_quota"] = true
+		}
+		if len(updates) > 0 {
+			if err := DB.Unscoped().Model(&token).Updates(updates).Error; err != nil {
+				return nil, err
+			}
+			if err := DB.Unscoped().Where("id = ?", token.Id).First(&token).Error; err != nil {
+				return nil, err
+			}
+		}
+		return &token, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
+	key, err := common.GenerateKey()
+	if err != nil {
+		return nil, err
+	}
+	now := common.GetTimestamp()
+	token = Token{
+		UserId:         userID,
+		Key:            key,
+		Status:         common.TokenStatusEnabled,
+		Name:           name,
+		CreatedTime:    now,
+		AccessedTime:   now,
+		ExpiredTime:    -1,
+		UnlimitedQuota: true,
+	}
+	if err := DB.Create(&token).Error; err != nil {
+		return nil, err
+	}
+	return &token, nil
+}
+
 func updateOAuthRelayToken(token *Token, key string, name string) (*Token, error) {
 	updates := map[string]interface{}{
 		"key":             key,

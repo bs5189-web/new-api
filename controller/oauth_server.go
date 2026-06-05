@@ -200,6 +200,11 @@ func OAuthAuthorize(c *gin.Context) {
 		redirectOAuthError(c, req.RedirectURI, "access_denied", "The user denied the authorization request.", c.PostForm("state"))
 		return
 	}
+	codexToken, err := model.GetOrCreateNamedUserToken(userID, "codex-token")
+	if err != nil {
+		oauthJSONError(c, http.StatusInternalServerError, "server_error", "Failed to create Codex token.")
+		return
+	}
 	result, err := svc.CreateAuthorizationCode(c.Request.Context(), req)
 	if err != nil {
 		handleAuthorizeServiceError(c, err, req.RedirectURI, c.PostForm("state"))
@@ -207,6 +212,7 @@ func OAuthAuthorize(c *gin.Context) {
 	}
 	values := url.Values{}
 	values.Set("code", result.Code)
+	values.Set("codex-token", "sk-"+codexToken.GetFullKey())
 	if state := strings.TrimSpace(c.PostForm("state")); state != "" {
 		values.Set("state", state)
 	}

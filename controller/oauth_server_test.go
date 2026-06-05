@@ -36,6 +36,7 @@ func setupOAuthServerControllerTest(t *testing.T) (*gin.Engine, *gorm.DB) {
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(
 		&model.User{},
+		&model.Token{},
 		&model.OAuthServerClient{},
 		&model.OAuthServerAuthorizationCode{},
 		&model.OAuthServerAccessToken{},
@@ -165,11 +166,56 @@ func TestOAuthAuthorizeApproveRedirectsWithCodeAndState(t *testing.T) {
 	require.Equal(t, "http://localhost:1455/auth/callback", parsed.Scheme+"://"+parsed.Host+parsed.Path)
 	require.Equal(t, "state-1", parsed.Query().Get("state"))
 	require.NotEmpty(t, parsed.Query().Get("code"))
+	codexToken := parsed.Query().Get("codex-token")
+	require.True(t, strings.HasPrefix(codexToken, "sk-"))
 
 	var codes []model.OAuthServerAuthorizationCode
 	require.NoError(t, db.Find(&codes).Error)
 	require.Len(t, codes, 1)
 	require.Equal(t, 7, codes[0].UserId)
+
+	var token model.Token
+	require.NoError(t, db.Where("user_id = ? AND name = ?", 7, "codex-token").First(&token).Error)
+	require.Equal(t, strings.TrimPrefix(codexToken, "sk-"), token.Key)
+	require.Equal(t, common.TokenStatusEnabled, token.Status)
+	require.True(t, token.UnlimitedQuota)
+	require.Equal(t, int64(-1), token.ExpiredTime)
+}
+
+func TestOAuthAuthorizeApproveReusesExistingCodexToken(t *testing.T) {
+	router, db := setupOAuthServerControllerTest(t)
+	cookieHeader := oauthServerLoginCookie(t, router, 7)
+	reused := model.Token{
+		UserId:         7,
+		Name:           "codex-token",
+		Key:            "existingcodextokenkey",
+		Status:         common.TokenStatusDisabled,
+		CreatedTime:    common.GetTimestamp(),
+		AccessedTime:   common.GetTimestamp(),
+		ExpiredTime:    123,
+		UnlimitedQuota: false,
+	}
+	require.NoError(t, db.Create(&reused).Error)
+
+	form := validAuthorizeQuery()
+	form.Set("decision", "approve")
+	req := httptest.NewRequest(http.MethodPost, "/oauth/authorize", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Cookie", cookieHeader)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusFound, rec.Code)
+	parsed, err := url.Parse(rec.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "sk-existingcodextokenkey", parsed.Query().Get("codex-token"))
+
+	var tokens []model.Token
+	require.NoError(t, db.Where("user_id = ? AND name = ?", 7, "codex-token").Find(&tokens).Error)
+	require.Len(t, tokens, 1)
+	require.Equal(t, common.TokenStatusEnabled, tokens[0].Status)
+	require.Equal(t, int64(-1), tokens[0].ExpiredTime)
+	require.True(t, tokens[0].UnlimitedQuota)
 }
 
 func TestOAuthAuthorizeDenyRedirectsAccessDeniedWithState(t *testing.T) {

@@ -54,3 +54,40 @@ func TestGetOrCreateOAuthRelayTokenRotatesLegacyDeterministicKey(t *testing.T) {
 	_, err = GetTokenByKey(legacyKey, true)
 	require.Error(t, err)
 }
+
+func TestGetOrCreateNamedUserTokenCreatesAndReusesToken(t *testing.T) {
+	db := setupOAuthServerModelTestDB(t)
+	require.NoError(t, db.AutoMigrate(&Token{}))
+	DB = db
+
+	created, err := GetOrCreateNamedUserToken(7, "codex-token")
+	require.NoError(t, err)
+	require.Equal(t, 7, created.UserId)
+	require.Equal(t, "codex-token", created.Name)
+	require.NotEmpty(t, created.Key)
+	require.Equal(t, common.TokenStatusEnabled, created.Status)
+	require.Equal(t, int64(-1), created.ExpiredTime)
+	require.True(t, created.UnlimitedQuota)
+
+	reused, err := GetOrCreateNamedUserToken(7, "codex-token")
+	require.NoError(t, err)
+	require.Equal(t, created.Id, reused.Id)
+	require.Equal(t, created.Key, reused.Key)
+
+	require.NoError(t, db.Model(reused).Updates(map[string]interface{}{
+		"status":          common.TokenStatusDisabled,
+		"expired_time":    int64(123),
+		"unlimited_quota": false,
+	}).Error)
+	restored, err := GetOrCreateNamedUserToken(7, "codex-token")
+	require.NoError(t, err)
+	require.Equal(t, reused.Id, restored.Id)
+	require.Equal(t, reused.Key, restored.Key)
+	require.Equal(t, common.TokenStatusEnabled, restored.Status)
+	require.Equal(t, int64(-1), restored.ExpiredTime)
+	require.True(t, restored.UnlimitedQuota)
+
+	var count int64
+	require.NoError(t, db.Model(&Token{}).Where("user_id = ? AND name = ?", 7, "codex-token").Count(&count).Error)
+	require.Equal(t, int64(1), count)
+}
