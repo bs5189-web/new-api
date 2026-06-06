@@ -20,6 +20,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useIsAdmin } from '@/hooks/use-admin'
 import {
   Table,
   TableBody,
@@ -38,6 +39,7 @@ interface ToolStat {
 
 export function ToolUsageStats() {
   const { t } = useTranslation()
+  const isAdmin = useIsAdmin()
   const [stats, setStats] = useState<ToolStat[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -47,11 +49,12 @@ export function ToolUsageStats() {
       // Last 7 days by default
       const now = Math.floor(Date.now() / 1000)
       const sevenDaysAgo = now - 7 * 24 * 3600
-      const params = {
+      const params: Record<string, unknown> = {
         start_timestamp: sevenDaysAgo,
         end_timestamp: now,
       }
-      const res = await api.get('/api/log/tool_stat', { params })
+      const endpoint = isAdmin ? '/api/log/tool_stat' : '/api/log/tool/self_stat'
+      const res = await api.get(endpoint, { params })
       if (res.data?.success && Array.isArray(res.data.data)) {
         setStats(res.data.data as ToolStat[])
       } else {
@@ -62,7 +65,7 @@ export function ToolUsageStats() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [isAdmin])
 
   useEffect(() => {
     void fetchStats()
@@ -119,7 +122,7 @@ export function ToolUsageStats() {
             <p className='text-sm text-muted-foreground py-8 text-center'>
               {loading
                 ? t('Loading...')
-                : t('No tool usage data found.')}
+                : t('No tool usage data found. Enable LOG_REQUEST_TOOLS=true and send requests with tools.')}
             </p>
           )}
         </CardContent>
