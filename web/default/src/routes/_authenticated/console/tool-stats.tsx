@@ -19,6 +19,6 @@ For commercial licensing, please contact support@quantumnous.com
 import { createFileRoute } from '@tanstack/react-router'
 import { ToolUsageStats } from '@/features/usage-logs/components/tool-usage-stats'
 
-export const Route = createFileRoute('/console/tool-stats')({
+export const Route = createFileRoute('/_authenticated/console/tool-stats')({
   component: ToolUsageStats,
 })

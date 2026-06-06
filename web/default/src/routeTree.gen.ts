@@ -21,7 +21,6 @@ import { Route as AboutIndexRouteImport } from './routes/about/index'
 import { Route as OauthAuthorizeRouteImport } from './routes/oauth/authorize'
 import { Route as OauthProviderRouteImport } from './routes/oauth/$provider'
 import { Route as ConsoleTopupRouteImport } from './routes/console/topup'
-import { Route as ConsoleToolStatsRouteImport } from './routes/console/tool-stats'
 import { Route as ConsoleLogRouteImport } from './routes/console/log'
 import { Route as AuthenticatedChat2linkRouteImport } from './routes/_authenticated/chat2link'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
@@ -54,6 +53,7 @@ import { Route as AuthenticatedUsageLogsSectionRouteImport } from './routes/_aut
 import { Route as AuthenticatedModelsSectionRouteImport } from './routes/_authenticated/models/$section'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedDashboardSectionRouteImport } from './routes/_authenticated/dashboard/$section'
+import { Route as AuthenticatedConsoleToolStatsRouteImport } from './routes/_authenticated/console/tool-stats'
 import { Route as AuthenticatedChatChatIdRouteImport } from './routes/_authenticated/chat/$chatId'
 import { Route as authUserResetRouteImport } from './routes/(auth)/user/reset'
 import { Route as AuthenticatedSystemSettingsSiteIndexRouteImport } from './routes/_authenticated/system-settings/site/index'
@@ -127,11 +127,6 @@ const OauthProviderRoute = OauthProviderRouteImport.update({
 const ConsoleTopupRoute = ConsoleTopupRouteImport.update({
   id: '/console/topup',
   path: '/console/topup',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ConsoleToolStatsRoute = ConsoleToolStatsRouteImport.update({
-  id: '/console/tool-stats',
-  path: '/console/tool-stats',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConsoleLogRoute = ConsoleLogRouteImport.update({
@@ -309,6 +304,12 @@ const AuthenticatedDashboardSectionRoute =
     path: '/dashboard/$section',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedConsoleToolStatsRoute =
+  AuthenticatedConsoleToolStatsRouteImport.update({
+    id: '/console/tool-stats',
+    path: '/console/tool-stats',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedChatChatIdRoute = AuthenticatedChatChatIdRouteImport.update({
   id: '/chat/$chatId',
   path: '/chat/$chatId',
@@ -423,7 +424,6 @@ export interface FileRoutesByFullPath {
   '/503': typeof errors503Route
   '/chat2link': typeof AuthenticatedChat2linkRoute
   '/console/log': typeof ConsoleLogRoute
-  '/console/tool-stats': typeof ConsoleToolStatsRoute
   '/console/topup': typeof ConsoleTopupRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
@@ -433,6 +433,7 @@ export interface FileRoutesByFullPath {
   '/setup/': typeof SetupIndexRoute
   '/user/reset': typeof authUserResetRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
+  '/console/tool-stats': typeof AuthenticatedConsoleToolStatsRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/models/$section': typeof AuthenticatedModelsSectionRoute
@@ -483,7 +484,6 @@ export interface FileRoutesByTo {
   '/503': typeof errors503Route
   '/chat2link': typeof AuthenticatedChat2linkRoute
   '/console/log': typeof ConsoleLogRoute
-  '/console/tool-stats': typeof ConsoleToolStatsRoute
   '/console/topup': typeof ConsoleTopupRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
@@ -493,6 +493,7 @@ export interface FileRoutesByTo {
   '/setup': typeof SetupIndexRoute
   '/user/reset': typeof authUserResetRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
+  '/console/tool-stats': typeof AuthenticatedConsoleToolStatsRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/models/$section': typeof AuthenticatedModelsSectionRoute
@@ -547,7 +548,6 @@ export interface FileRoutesById {
   '/(errors)/503': typeof errors503Route
   '/_authenticated/chat2link': typeof AuthenticatedChat2linkRoute
   '/console/log': typeof ConsoleLogRoute
-  '/console/tool-stats': typeof ConsoleToolStatsRoute
   '/console/topup': typeof ConsoleTopupRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
@@ -557,6 +557,7 @@ export interface FileRoutesById {
   '/setup/': typeof SetupIndexRoute
   '/(auth)/user/reset': typeof authUserResetRoute
   '/_authenticated/chat/$chatId': typeof AuthenticatedChatChatIdRoute
+  '/_authenticated/console/tool-stats': typeof AuthenticatedConsoleToolStatsRoute
   '/_authenticated/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/models/$section': typeof AuthenticatedModelsSectionRoute
@@ -610,7 +611,6 @@ export interface FileRouteTypes {
     | '/503'
     | '/chat2link'
     | '/console/log'
-    | '/console/tool-stats'
     | '/console/topup'
     | '/oauth/$provider'
     | '/oauth/authorize'
@@ -620,6 +620,7 @@ export interface FileRouteTypes {
     | '/setup/'
     | '/user/reset'
     | '/chat/$chatId'
+    | '/console/tool-stats'
     | '/dashboard/$section'
     | '/errors/$error'
     | '/models/$section'
@@ -670,7 +671,6 @@ export interface FileRouteTypes {
     | '/503'
     | '/chat2link'
     | '/console/log'
-    | '/console/tool-stats'
     | '/console/topup'
     | '/oauth/$provider'
     | '/oauth/authorize'
@@ -680,6 +680,7 @@ export interface FileRouteTypes {
     | '/setup'
     | '/user/reset'
     | '/chat/$chatId'
+    | '/console/tool-stats'
     | '/dashboard/$section'
     | '/errors/$error'
     | '/models/$section'
@@ -733,7 +734,6 @@ export interface FileRouteTypes {
     | '/(errors)/503'
     | '/_authenticated/chat2link'
     | '/console/log'
-    | '/console/tool-stats'
     | '/console/topup'
     | '/oauth/$provider'
     | '/oauth/authorize'
@@ -743,6 +743,7 @@ export interface FileRouteTypes {
     | '/setup/'
     | '/(auth)/user/reset'
     | '/_authenticated/chat/$chatId'
+    | '/_authenticated/console/tool-stats'
     | '/_authenticated/dashboard/$section'
     | '/_authenticated/errors/$error'
     | '/_authenticated/models/$section'
@@ -788,7 +789,6 @@ export interface RootRouteChildren {
   errors500Route: typeof errors500Route
   errors503Route: typeof errors503Route
   ConsoleLogRoute: typeof ConsoleLogRoute
-  ConsoleToolStatsRoute: typeof ConsoleToolStatsRoute
   ConsoleTopupRoute: typeof ConsoleTopupRoute
   OauthProviderRoute: typeof OauthProviderRoute
   OauthAuthorizeRoute: typeof OauthAuthorizeRoute
@@ -883,13 +883,6 @@ declare module '@tanstack/react-router' {
       path: '/console/topup'
       fullPath: '/console/topup'
       preLoaderRoute: typeof ConsoleTopupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/console/tool-stats': {
-      id: '/console/tool-stats'
-      path: '/console/tool-stats'
-      fullPath: '/console/tool-stats'
-      preLoaderRoute: typeof ConsoleToolStatsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/console/log': {
@@ -1116,6 +1109,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardSectionRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/console/tool-stats': {
+      id: '/_authenticated/console/tool-stats'
+      path: '/console/tool-stats'
+      fullPath: '/console/tool-stats'
+      preLoaderRoute: typeof AuthenticatedConsoleToolStatsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/chat/$chatId': {
       id: '/_authenticated/chat/$chatId'
       path: '/chat/$chatId'
@@ -1318,6 +1318,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemSettingsRouteRoute: typeof AuthenticatedSystemSettingsRouteRouteWithChildren
   AuthenticatedChat2linkRoute: typeof AuthenticatedChat2linkRoute
   AuthenticatedChatChatIdRoute: typeof AuthenticatedChatChatIdRoute
+  AuthenticatedConsoleToolStatsRoute: typeof AuthenticatedConsoleToolStatsRoute
   AuthenticatedDashboardSectionRoute: typeof AuthenticatedDashboardSectionRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedModelsSectionRoute: typeof AuthenticatedModelsSectionRoute
@@ -1340,6 +1341,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedSystemSettingsRouteRouteWithChildren,
   AuthenticatedChat2linkRoute: AuthenticatedChat2linkRoute,
   AuthenticatedChatChatIdRoute: AuthenticatedChatChatIdRoute,
+  AuthenticatedConsoleToolStatsRoute: AuthenticatedConsoleToolStatsRoute,
   AuthenticatedDashboardSectionRoute: AuthenticatedDashboardSectionRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedModelsSectionRoute: AuthenticatedModelsSectionRoute,
@@ -1373,7 +1375,6 @@ const rootRouteChildren: RootRouteChildren = {
   errors500Route: errors500Route,
   errors503Route: errors503Route,
   ConsoleLogRoute: ConsoleLogRoute,
-  ConsoleToolStatsRoute: ConsoleToolStatsRoute,
   ConsoleTopupRoute: ConsoleTopupRoute,
   OauthProviderRoute: OauthProviderRoute,
   OauthAuthorizeRoute: OauthAuthorizeRoute,
