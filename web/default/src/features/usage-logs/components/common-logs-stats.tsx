@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
@@ -23,10 +24,25 @@ import { formatLogQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useIsAdmin } from '@/hooks/use-admin'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { getLogStats, getUserLogStats } from '../api'
 import { DEFAULT_LOG_STATS } from '../constants'
 import { buildApiParams } from '../lib/utils'
 import { useUsageLogsContext } from './usage-logs-provider'
+import type { QuotaUsageDetail } from '../types'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
 
@@ -51,6 +67,7 @@ export function CommonLogsStats() {
   const isAdmin = useIsAdmin()
   const searchParams = route.useSearch()
   const { sensitiveVisible } = useUsageLogsContext()
+  const [showDetails, setShowDetails] = useState(false)
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['usage-logs-stats', isAdmin, searchParams],
@@ -74,6 +91,8 @@ export function CommonLogsStats() {
     placeholderData: (previousData) => previousData,
   })
 
+  const details: QuotaUsageDetail[] = stats?.details || []
+
   if (isLoading) {
     return (
       <div className='flex items-center gap-2'>
@@ -85,22 +104,90 @@ export function CommonLogsStats() {
   }
 
   return (
-    <div className='flex flex-wrap items-center gap-2'>
-      <StatBadge
-        label={t('Usage')}
-        value={sensitiveVisible ? formatLogQuota(stats?.quota || 0) : '••••'}
-        accent='bg-sky-500/70'
-      />
-      <StatBadge
-        label={t('RPM')}
-        value={stats?.rpm || 0}
-        accent='bg-rose-500/65'
-      />
-      <StatBadge
-        label={t('TPM')}
-        value={stats?.tpm || 0}
-        accent='bg-slate-400/70'
-      />
-    </div>
+    <>
+      <div className='flex flex-wrap items-center gap-2'>
+        <StatBadge
+          label={t('Usage')}
+          value={sensitiveVisible ? formatLogQuota(stats?.quota || 0) : '••••'}
+          accent='bg-sky-500/70'
+        />
+        <StatBadge
+          label={t('RPM')}
+          value={stats?.rpm || 0}
+          accent='bg-rose-500/65'
+        />
+        <StatBadge
+          label={t('TPM')}
+          value={stats?.tpm || 0}
+          accent='bg-slate-400/70'
+        />
+        {details.length > 0 && (
+          <button
+            type='button'
+            onClick={() => setShowDetails(!showDetails)}
+            className='border-border/60 bg-muted/25 hover:bg-muted/40 inline-flex h-7 items-center gap-1 rounded-md border px-2.5 text-xs shadow-xs transition-colors'
+          >
+            {showDetails ? '▴' : '▾'} <span className='text-muted-foreground'>{t('Details')}</span>
+          </button>
+        )}
+      </div>
+
+      {/* Usage Detail by User + Key */}
+      {showDetails && details.length > 0 && (
+        <Card className='mt-2 rounded-xl border shadow-xs'>
+          <CardHeader className='px-4 py-3'>
+            <CardTitle className='text-xs font-semibold'>
+              {t('Usage by User & Key')}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className='px-0 pb-0'>
+            <div className='max-h-60 overflow-auto'>
+              <Table>
+                <TableHeader className='bg-muted/30 sticky top-0'>
+                  <TableRow>
+                    <TableHead className='text-xs'>{t('User')}</TableHead>
+                    <TableHead className='text-xs'>{t('Key')}</TableHead>
+                    <TableHead className='text-right text-xs'>{t('Requests')}</TableHead>
+                    <TableHead className='text-right text-xs'>{t('Prompt Tokens')}</TableHead>
+                    <TableHead className='text-right text-xs'>{t('Completion Tokens')}</TableHead>
+                    <TableHead className='text-right text-xs'>{t('Total Tokens')}</TableHead>
+                    <TableHead className='text-right text-xs'>{t('Usage')}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {details.map((d, idx) => (
+                    <TableRow key={`${d.user_id}-${d.token_id}-${idx}`}>
+                      <TableCell className='text-xs'>
+                        <div className='font-medium'>{d.username || '—'}</div>
+                        <div className='text-muted-foreground font-mono'>ID: {d.user_id || '—'}</div>
+                      </TableCell>
+                      <TableCell className='text-xs'>
+                        <div className='font-medium'>{d.token_name || '—'}</div>
+                        <div className='text-muted-foreground font-mono'>ID: {d.token_id || '—'}</div>
+                      </TableCell>
+                      <TableCell className='text-right font-mono text-xs tabular-nums'>
+                        {d.count.toLocaleString()}
+                      </TableCell>
+                      <TableCell className='text-right font-mono text-xs tabular-nums'>
+                        {d.prompt_tokens.toLocaleString()}
+                      </TableCell>
+                      <TableCell className='text-right font-mono text-xs tabular-nums'>
+                        {d.completion_tokens.toLocaleString()}
+                      </TableCell>
+                      <TableCell className='text-right font-mono text-xs tabular-nums'>
+                        {d.total_tokens.toLocaleString()}
+                      </TableCell>
+                      <TableCell className='text-right font-mono text-xs tabular-nums'>
+                        {sensitiveVisible ? formatLogQuota(d.quota || 0) : '••••'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </>
   )
 }

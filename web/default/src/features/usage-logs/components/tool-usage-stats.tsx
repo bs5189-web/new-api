@@ -16,10 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { formatLogQuota } from '@/lib/format'
 import { useIsAdmin } from '@/hooks/use-admin'
 import {
   Card,
@@ -53,7 +53,11 @@ import {
   RefreshCw,
   AlertCircle,
   ListOrdered,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react'
+import { getToolStatsDetail, getUserToolStatsDetail } from '../api'
+import type { ToolCallDetail } from '../types'
 
 interface ToolStat {
   tool_name: string
@@ -83,10 +87,17 @@ function getTimeRangeSeconds(range: TimeRange): { start: number; end: number } {
   }
 }
 
+function formatTime(timestamp: number): string {
+  if (!timestamp) return '—'
+  return new Date(timestamp * 1000).toLocaleString()
+}
+
 export function ToolUsageStats() {
   const { t } = useTranslation()
   const isAdmin = useIsAdmin()
   const [stats, setStats] = useState<ToolStat[]>([])
+  const [details, setDetails] = useState<Record<string, ToolCallDetail[]>>({})
+  const [expandedTool, setExpandedTool] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
   const [timeRange, setTimeRange] = useState<TimeRange>('7d')
@@ -100,15 +111,19 @@ export function ToolUsageStats() {
         start_timestamp: start,
         end_timestamp: end,
       }
-      const endpoint = isAdmin ? '/api/log/tool_stat' : '/api/log/tool/self_stat'
-      const res = await api.get(endpoint, { params })
-      if (res.data?.success && Array.isArray(res.data.data)) {
-        setStats(res.data.data as ToolStat[])
+      const res = isAdmin
+        ? await getToolStatsDetail(params)
+        : await getUserToolStatsDetail(params)
+      if (res?.success && Array.isArray(res.data)) {
+        setStats(res.data as ToolStat[])
+        setDetails(res.details || {})
       } else {
         setStats([])
+        setDetails({})
       }
     } catch {
       setStats([])
+      setDetails({})
       setError(true)
     } finally {
       setLoading(false)
@@ -309,55 +324,114 @@ export function ToolUsageStats() {
                       ? (stat.call_count / totalCount) * 100
                       : 0
 
+                    const toolDetails = details[stat.tool_name] || []
+                    const expanded = expandedTool === stat.tool_name
+
                     return (
-                      <TableRow key={stat.tool_name} className='group'>
-                        <TableCell className='text-muted-foreground font-mono text-xs tabular-nums'>
-                          {index < 3 ? (
-                            <span
-                              className={cn(
-                                'inline-flex size-5 items-center justify-center rounded text-[11px] font-bold',
-                                index === 0 &&
-                                  'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400',
-                                index === 1 &&
-                                  'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-                                index === 2 &&
-                                  'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400'
+                      <React.Fragment key={stat.tool_name}>
+                        <TableRow
+                          className='group cursor-pointer'
+                          onClick={() => setExpandedTool(expanded ? null : stat.tool_name)}
+                        >
+                          <TableCell className='text-muted-foreground font-mono text-xs tabular-nums'>
+                            <span className='inline-flex items-center gap-1'>
+                              {expanded ? (
+                                <ChevronDown className='size-3' aria-hidden='true' />
+                              ) : (
+                                <ChevronRight className='size-3' aria-hidden='true' />
                               )}
-                            >
-                              {index + 1}
+                              {index < 3 ? (
+                                <span
+                                  className={cn(
+                                    'inline-flex size-5 items-center justify-center rounded text-[11px] font-bold',
+                                    index === 0 &&
+                                      'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400',
+                                    index === 1 &&
+                                      'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+                                    index === 2 &&
+                                      'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400'
+                                  )}
+                                >
+                                  {index + 1}
+                                </span>
+                              ) : (
+                                index + 1
+                              )}
                             </span>
-                          ) : (
-                            index + 1
-                          )}
-                        </TableCell>
-                        <TableCell className='font-mono text-sm font-medium'>
-                          <span className='max-w-[200px] truncate sm:max-w-[300px] lg:max-w-[400px]'>
-                            {stat.tool_name}
-                          </span>
-                        </TableCell>
-                        <TableCell className='text-right font-mono text-sm tabular-nums'>
-                          {stat.call_count.toLocaleString()}
-                        </TableCell>
-                        <TableCell className='text-right'>
-                          <span className='inline-flex items-center gap-1.5'>
-                            <span className='text-muted-foreground font-mono text-xs tabular-nums'>
-                              {proportion.toFixed(1)}%
+                          </TableCell>
+                          <TableCell className='font-mono text-sm font-medium'>
+                            <span className='max-w-[200px] truncate sm:max-w-[300px] lg:max-w-[400px]'>
+                              {stat.tool_name}
                             </span>
-                            <span
-                              className='bg-primary/20 dark:bg-primary/30 h-1.5 w-12 overflow-hidden rounded-full'
-                              aria-hidden='true'
-                            >
+                          </TableCell>
+                          <TableCell className='text-right font-mono text-sm tabular-nums'>
+                            {stat.call_count.toLocaleString()}
+                          </TableCell>
+                          <TableCell className='text-right'>
+                            <span className='inline-flex items-center gap-1.5'>
+                              <span className='text-muted-foreground font-mono text-xs tabular-nums'>
+                                {proportion.toFixed(1)}%
+                              </span>
                               <span
-                                className='bg-primary block h-full rounded-full'
-                                style={{ width: `${Math.min(proportion, 100)}%` }}
-                              />
+                                className='bg-primary/20 dark:bg-primary/30 h-1.5 w-12 overflow-hidden rounded-full'
+                                aria-hidden='true'
+                              >
+                                <span
+                                  className='bg-primary block h-full rounded-full'
+                                  style={{ width: `${Math.min(proportion, 100)}%` }}
+                                />
+                              </span>
                             </span>
-                          </span>
-                        </TableCell>
-                        <TableCell className='hidden text-right font-mono text-xs tabular-nums text-muted-foreground sm:table-cell'>
-                          {proportion.toFixed(1)}%
-                        </TableCell>
-                      </TableRow>
+                          </TableCell>
+                          <TableCell className='hidden text-right font-mono text-xs tabular-nums text-muted-foreground sm:table-cell'>
+                            {proportion.toFixed(1)}%
+                          </TableCell>
+                        </TableRow>
+                        {expanded && (
+                          <TableRow>
+                            <TableCell colSpan={5} className='bg-muted/20 p-0'>
+                              <div className='max-h-72 overflow-auto p-3'>
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead className='text-xs'>{t('User')}</TableHead>
+                                      <TableHead className='text-xs'>{t('Key')}</TableHead>
+                                      <TableHead className='text-xs'>{t('Model')}</TableHead>
+                                      <TableHead className='text-xs'>{t('Time')}</TableHead>
+                                      <TableHead className='text-right text-xs'>{t('Usage')}</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {toolDetails.length > 0 ? (
+                                      toolDetails.map((detail) => (
+                                        <TableRow key={`${detail.log_id}-${detail.token_id}`}>
+                                          <TableCell className='text-xs'>
+                                            <div className='font-medium'>{detail.username || '—'}</div>
+                                            <div className='text-muted-foreground font-mono'>ID: {detail.user_id || '—'}</div>
+                                          </TableCell>
+                                          <TableCell className='text-xs'>
+                                            <div className='font-medium'>{detail.token_name || '—'}</div>
+                                            <div className='text-muted-foreground font-mono'>ID: {detail.token_id || '—'}</div>
+                                          </TableCell>
+                                          <TableCell className='font-mono text-xs'>{detail.model_name || '—'}</TableCell>
+                                          <TableCell className='text-muted-foreground text-xs'>{formatTime(detail.created_at)}</TableCell>
+                                          <TableCell className='text-right font-mono text-xs'>{formatLogQuota(detail.quota || 0)}</TableCell>
+                                        </TableRow>
+                                      ))
+                                    ) : (
+                                      <TableRow>
+                                        <TableCell colSpan={5} className='text-muted-foreground py-4 text-center text-xs'>
+                                          {t('No detail records')}
+                                        </TableCell>
+                                      </TableRow>
+                                    )}
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </React.Fragment>
                     )
                   })}
                 </TableBody>

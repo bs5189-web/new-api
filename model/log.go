@@ -454,21 +454,25 @@ type Stat struct {
 	Tpm   int `json:"tpm"`
 }
 
-func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string) (stat Stat, err error) {
-	tx := LOG_DB.Table("logs").Select("sum(quota) quota")
+type QuotaUsageDetail struct {
+	UserId           int    `json:"user_id"`
+	Username         string `json:"username"`
+	TokenId          int    `json:"token_id"`
+	TokenName        string `json:"token_name"`
+	Quota            int    `json:"quota"`
+	PromptTokens     int    `json:"prompt_tokens"`
+	CompletionTokens int    `json:"completion_tokens"`
+	TotalTokens      int    `json:"total_tokens"`
+	Count            int    `json:"count"`
+}
 
-	// 为rpm和tpm创建单独的查询
-	rpmTpmQuery := LOG_DB.Table("logs").Select("count(*) rpm, sum(prompt_tokens) + sum(completion_tokens) tpm")
-
+func applyLogStatFilters(tx *gorm.DB, logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string) (*gorm.DB, error) {
+	var err error
 	if tx, err = applyExplicitLogTextFilter(tx, "username", username); err != nil {
-		return stat, err
-	}
-	if rpmTpmQuery, err = applyExplicitLogTextFilter(rpmTpmQuery, "username", username); err != nil {
-		return stat, err
+		return tx, err
 	}
 	if tokenName != "" {
 		tx = tx.Where("token_name = ?", tokenName)
-		rpmTpmQuery = rpmTpmQuery.Where("token_name = ?", tokenName)
 	}
 	if startTimestamp != 0 {
 		tx = tx.Where("created_at >= ?", startTimestamp)
@@ -477,22 +481,32 @@ func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelNa
 		tx = tx.Where("created_at <= ?", endTimestamp)
 	}
 	if tx, err = applyExplicitLogTextFilter(tx, "model_name", modelName); err != nil {
-		return stat, err
-	}
-	if rpmTpmQuery, err = applyExplicitLogTextFilter(rpmTpmQuery, "model_name", modelName); err != nil {
-		return stat, err
+		return tx, err
 	}
 	if channel != 0 {
 		tx = tx.Where("channel_id = ?", channel)
-		rpmTpmQuery = rpmTpmQuery.Where("channel_id = ?", channel)
 	}
 	if group != "" {
 		tx = tx.Where(logGroupCol+" = ?", group)
-		rpmTpmQuery = rpmTpmQuery.Where(logGroupCol+" = ?", group)
 	}
+	if logType != 0 {
+		tx = tx.Where("type = ?", logType)
+	}
+	return tx, nil
+}
 
-	tx = tx.Where("type = ?", LogTypeConsume)
-	rpmTpmQuery = rpmTpmQuery.Where("type = ?", LogTypeConsume)
+func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string) (stat Stat, err error) {
+	tx := LOG_DB.Table("logs").Select("COALESCE(sum(quota),0) quota")
+
+	// 为rpm和tpm创建单独的查询
+	rpmTpmQuery := LOG_DB.Table("logs").Select("count(*) rpm, COALESCE(sum(prompt_tokens),0) + COALESCE(sum(completion_tokens),0) tpm")
+
+	if tx, err = applyLogStatFilters(tx, LogTypeConsume, startTimestamp, endTimestamp, modelName, username, tokenName, channel, group); err != nil {
+		return stat, err
+	}
+	if rpmTpmQuery, err = applyLogStatFilters(rpmTpmQuery, LogTypeConsume, 0, 0, modelName, username, tokenName, channel, group); err != nil {
+		return stat, err
+	}
 
 	// 只统计最近60秒的rpm和tpm
 	rpmTpmQuery = rpmTpmQuery.Where("created_at >= ?", time.Now().Add(-60*time.Second).Unix())
@@ -510,8 +524,33 @@ func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	return stat, nil
 }
 
+func SumUsedQuotaDetails(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string) (details []QuotaUsageDetail, err error) {
+	tx := LOG_DB.Table("logs").Select(strings.Join([]string{
+		"user_id",
+		"username",
+		"token_id",
+		"token_name",
+		"COALESCE(sum(quota),0) quota",
+		"COALESCE(sum(prompt_tokens),0) prompt_tokens",
+		"COALESCE(sum(completion_tokens),0) completion_tokens",
+		"COALESCE(sum(prompt_tokens),0) + COALESCE(sum(completion_tokens),0) total_tokens",
+		"count(*) count",
+	}, ", "))
+	if tx, err = applyLogStatFilters(tx, LogTypeConsume, startTimestamp, endTimestamp, modelName, username, tokenName, channel, group); err != nil {
+		return nil, err
+	}
+	err = tx.Group("user_id, username, token_id, token_name").
+		Order("total_tokens desc").
+		Scan(&details).Error
+	if err != nil {
+		common.SysError("failed to query log stat details: " + err.Error())
+		return nil, errors.New("查询统计明细失败")
+	}
+	return details, nil
+}
+
 func SumUsedToken(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string) (token int) {
-	tx := LOG_DB.Table("logs").Select("ifnull(sum(prompt_tokens),0) + ifnull(sum(completion_tokens),0)")
+	tx := LOG_DB.Table("logs").Select("COALESCE(sum(prompt_tokens),0) + COALESCE(sum(completion_tokens),0)")
 	if username != "" {
 		tx = tx.Where("username = ?", username)
 	}
@@ -557,6 +596,17 @@ func DeleteOldLog(ctx context.Context, targetTimestamp int64, limit int) (int64,
 type ToolUsageStat struct {
 	ToolName  string `json:"tool_name"`
 	CallCount int    `json:"call_count"`
+}
+
+type ToolCallDetail struct {
+	LogId     int    `json:"log_id"`
+	UserId    int    `json:"user_id"`
+	Username  string `json:"username"`
+	TokenId   int    `json:"token_id"`
+	TokenName string `json:"token_name"`
+	ModelName string `json:"model_name"`
+	CreatedAt int64  `json:"created_at"`
+	Quota     int    `json:"quota"`
 }
 
 func SumToolUsage(startTimestamp int64, endTimestamp int64, username string) ([]ToolUsageStat, error) {
@@ -612,4 +662,71 @@ func SumToolUsage(startTimestamp int64, endTimestamp int64, username string) ([]
 		}
 	}
 	return result, nil
+}
+
+// SumToolUsageWithDetail returns tool/skill usage stats with individual call
+// details including username, token_name, model_name, and created_at.
+func SumToolUsageWithDetail(startTimestamp int64, endTimestamp int64, username string) ([]ToolUsageStat, map[string][]ToolCallDetail, error) {
+	tx := LOG_DB.Table("logs").Where("type = ?", LogTypeConsume).
+		Where("other != ''").Where("other LIKE ?", "%\"tools\"%")
+	if startTimestamp != 0 {
+		tx = tx.Where("created_at >= ?", startTimestamp)
+	}
+	if endTimestamp != 0 {
+		tx = tx.Where("created_at <= ?", endTimestamp)
+	}
+	if username != "" {
+		tx = tx.Where("username = ?", username)
+	}
+
+	var logs []Log
+	if err := tx.Find(&logs).Error; err != nil {
+		return nil, nil, err
+	}
+
+	toolCounts := make(map[string]int)
+	toolLogMap := make(map[string][]ToolCallDetail)
+	for _, l := range logs {
+		var otherMap map[string]interface{}
+		if err := common.UnmarshalJsonStr(l.Other, &otherMap); err != nil {
+			continue
+		}
+		tools, ok := otherMap["tools"]
+		if !ok {
+			continue
+		}
+		toolList, ok := tools.([]interface{})
+		if !ok {
+			continue
+		}
+		detail := ToolCallDetail{
+			LogId:     l.Id,
+			UserId:    l.UserId,
+			Username:  l.Username,
+			TokenId:   l.TokenId,
+			TokenName: l.TokenName,
+			ModelName: l.ModelName,
+			CreatedAt: l.CreatedAt,
+			Quota:     l.Quota,
+		}
+		for _, t := range toolList {
+			if name, ok := t.(string); ok && name != "" {
+				toolCounts[name]++
+				toolLogMap[name] = append(toolLogMap[name], detail)
+			}
+		}
+	}
+
+	result := make([]ToolUsageStat, 0, len(toolCounts))
+	for name, count := range toolCounts {
+		result = append(result, ToolUsageStat{ToolName: name, CallCount: count})
+	}
+	for i := 0; i < len(result); i++ {
+		for j := i + 1; j < len(result); j++ {
+			if result[j].CallCount > result[i].CallCount {
+				result[i], result[j] = result[j], result[i]
+			}
+		}
+	}
+	return result, toolLogMap, nil
 }

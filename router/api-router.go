@@ -310,6 +310,8 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/self/stat", middleware.UserAuth(), controller.GetLogsSelfStat)
 		logRoute.GET("/tool_stat", middleware.AdminAuth(), controller.GetToolUsageStat)
 		logRoute.GET("/tool/self_stat", middleware.UserAuth(), controller.GetToolUsageSelfStat)
+		logRoute.GET("/tool_stat/detail", middleware.AdminAuth(), controller.GetToolUsageStatDetail)
+		logRoute.GET("/tool/self_stat/detail", middleware.UserAuth(), controller.GetToolUsageSelfStatDetail)
 		logRoute.GET("/channel_affinity_usage_cache", middleware.AdminAuth(), controller.GetChannelAffinityUsageCacheStats)
 		logRoute.GET("/search", middleware.AdminAuth(), controller.SearchAllLogs)
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)

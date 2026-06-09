@@ -203,11 +203,35 @@ export interface LogStatistics {
   quota: number
   rpm: number
   tpm: number
+  details?: QuotaUsageDetail[]
 }
 
 export interface ToolUsageStat {
   tool_name: string
   call_count: number
+}
+
+export interface ToolCallDetail {
+  log_id: number
+  user_id: number
+  username: string
+  token_id: number
+  token_name: string
+  model_name: string
+  created_at: number
+  quota: number
+}
+
+export interface QuotaUsageDetail {
+  user_id: number
+  username: string
+  token_id: number
+  token_name: string
+  quota: number
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  count: number
 }
 
 export interface GetToolStatsParams {
@@ -308,6 +332,13 @@ export interface GetLogStatsParams {
   group?: string
   request_id?: string
   upstream_request_id?: string
+}
+
+export interface GetToolStatsDetailResponse {
+  success: boolean
+  message?: string
+  data?: ToolUsageStat[]
+  details?: Record<string, ToolCallDetail[]>
 }
 
 export interface GetLogStatsResponse {

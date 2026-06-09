@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 import React, { useState, useEffect } from 'react';
 import { Card, Table, Select, Button, Typography, Space, Toast } from '@douyinfe/semi-ui';
-import { API } from '../../helpers';
+import { API, renderQuota } from '../../helpers';
 import { useTranslation } from 'react-i18next';
 
 const { Text, Title } = Typography;
@@ -32,9 +32,15 @@ const TIME_RANGES = [
   { value: 'all', label: '全部时间', seconds: 0 },
 ];
 
+const formatTime = (timestamp) => {
+  if (!timestamp) return '—';
+  return new Date(timestamp * 1000).toLocaleString();
+};
+
 const ToolStats = () => {
   const { t } = useTranslation();
   const [stats, setStats] = useState([]);
+  const [details, setDetails] = useState({});
   const [loading, setLoading] = useState(false);
   const [timeRange, setTimeRange] = useState('7d');
 
@@ -45,17 +51,20 @@ const ToolStats = () => {
       const rangeConfig = TIME_RANGES.find((r) => r.value === range);
       const startTimestamp = rangeConfig?.seconds ? now - rangeConfig.seconds : 0;
 
-      const res = await API.get(`/api/log/tool_stat?start_timestamp=${startTimestamp}&end_timestamp=${now}`);
+      const res = await API.get(`/api/log/tool_stat/detail?start_timestamp=${startTimestamp}&end_timestamp=${now}`);
 
       if (res.data?.success && Array.isArray(res.data.data)) {
         setStats(res.data.data);
+        setDetails(res.data.details || {});
       } else {
         setStats([]);
+        setDetails({});
         Toast.warning(res.data?.message || '获取数据失败');
       }
     } catch (err) {
       console.error('Failed to fetch tool stats:', err);
       setStats([]);
+      setDetails({});
       Toast.error('数据加载失败');
     } finally {
       setLoading(false);
@@ -72,6 +81,52 @@ const ToolStats = () => {
   const topToolProportion = topTool && totalCount > 0
     ? ((topTool.call_count / totalCount) * 100).toFixed(1)
     : '0';
+
+  const detailColumns = [
+    {
+      title: t('用户'),
+      dataIndex: 'username',
+      key: 'username',
+      render: (text, record) => (
+        <div>
+          <Text strong>{text || '—'}</Text>
+          <br />
+          <Text type="tertiary" size="small">ID: {record.user_id || '—'}</Text>
+        </div>
+      ),
+    },
+    {
+      title: t('Key'),
+      dataIndex: 'token_name',
+      key: 'token_name',
+      render: (text, record) => (
+        <div>
+          <Text>{text || '—'}</Text>
+          <br />
+          <Text type="tertiary" size="small">ID: {record.token_id || '—'}</Text>
+        </div>
+      ),
+    },
+    {
+      title: t('模型'),
+      dataIndex: 'model_name',
+      key: 'model_name',
+      render: (text) => <Text code>{text || '—'}</Text>,
+    },
+    {
+      title: t('时间'),
+      dataIndex: 'created_at',
+      key: 'created_at',
+      render: (text) => <Text type="tertiary">{formatTime(text)}</Text>,
+    },
+    {
+      title: t('额度'),
+      dataIndex: 'quota',
+      key: 'quota',
+      align: 'right',
+      render: (text) => <Text type="tertiary">{renderQuota(text || 0)}</Text>,
+    },
+  ];
 
   const columns = [
     {
@@ -177,6 +232,15 @@ const ToolStats = () => {
             rowKey={(record) => record.tool_name}
             loading={loading}
             pagination={false}
+            expandedRowRender={(record) => (
+              <Table
+                size="small"
+                columns={detailColumns}
+                dataSource={details[record.tool_name] || []}
+                rowKey={(detail) => `${detail.log_id}-${detail.token_id}`}
+                pagination={false}
+              />
+            )}
             empty={
               <div style={{ textAlign: 'center', padding: '40px 0' }}>
                 <Text type="tertiary">

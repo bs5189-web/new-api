@@ -23,6 +23,7 @@ import type {
   GetLogsResponse,
   GetLogStatsParams,
   GetLogStatsResponse,
+  GetToolStatsDetailResponse,
   GetMidjourneyLogsParams,
   GetTaskLogsParams,
   UserInfo,
@@ -107,6 +108,22 @@ export async function getUserToolStats(
 ): Promise<{ success: boolean; message?: string; data?: Array<{ tool_name: string; call_count: number }> }> {
   const queryParams = buildQueryParams(params)
   const res = await api.get(`/api/log/tool/self_stat?${queryParams}`)
+  return res.data
+}
+
+export async function getToolStatsDetail(
+  params: Record<string, unknown> = {}
+): Promise<GetToolStatsDetailResponse> {
+  const queryParams = buildQueryParams(params)
+  const res = await api.get(`/api/log/tool_stat/detail?${queryParams}`)
+  return res.data
+}
+
+export async function getUserToolStatsDetail(
+  params: Record<string, unknown> = {}
+): Promise<GetToolStatsDetailResponse> {
+  const queryParams = buildQueryParams(params)
+  const res = await api.get(`/api/log/tool/self_stat/detail?${queryParams}`)
   return res.data
 }
 
