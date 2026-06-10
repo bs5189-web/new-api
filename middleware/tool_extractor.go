@@ -8,6 +8,49 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+// cladeCodeBuiltInTools lists Claude Code / LLM framework built-in tool
+// names that should be excluded from logging. Only user-defined skills/tools
+// are meant to be tracked.
+var cladeCodeBuiltInTools = map[string]struct{}{
+	// Claude Code tools
+	"Agent":           {},
+	"AskUserQuestion": {},
+	"Bash":            {},
+	"CronCreate":      {},
+	"CronDelete":      {},
+	"CronList":        {},
+	"Edit":            {},
+	"EnterPlanMode":   {},
+	"EnterWorktree":   {},
+	"ExitPlanMode":    {},
+	"ExitWorktree":    {},
+	"Monitor":         {},
+	"NotebookEdit":    {},
+	"PushNotification": {},
+	"Read":            {},
+	"ScheduleWakeup":  {},
+	"SendMessage":     {},
+	"Skill":           {},
+	"TaskCreate":      {},
+	"TaskGet":         {},
+	"TaskList":        {},
+	"TaskOutput":      {},
+	"TaskStop":        {},
+	"TaskUpdate":      {},
+	"TeamCreate":      {},
+	"TeamDelete":      {},
+	"TeamUpdate":      {},
+	"WebFetch":        {},
+	"WebSearch":       {},
+	"Workflow":        {},
+	"Write":           {},
+	// Common LLM framework tools
+	"code_interpreter": {},
+	"browser":          {},
+	"file_search":      {},
+	"python":           {},
+}
+
 // ToolExtractorMiddleware extracts tool/skill/function names from the raw
 // request body and stores them on the Gin context for consumption log
 // recording. Runs before Distribute() so the body is still readable.
@@ -65,19 +108,25 @@ func extractToolNames(body []byte) []string {
 		}
 		// Claude format: tools[].name
 		if name := tool.Get("name").String(); name != "" {
-			names = append(names, name)
+			if _, ok := cladeCodeBuiltInTools[name]; !ok {
+				names = append(names, name)
+			}
 			continue
 		}
 		// OpenAI format: tools[].function.name
 		if fn := tool.Get("function"); fn.Exists() {
 			if name := fn.Get("name").String(); name != "" {
-				names = append(names, name)
+				if _, ok := cladeCodeBuiltInTools[name]; !ok {
+					names = append(names, name)
+				}
 				continue
 			}
 		}
 		// Generic fallback: tools[].type
 		if toolType := tool.Get("type").String(); toolType != "" {
-			names = append(names, toolType)
+			if _, ok := cladeCodeBuiltInTools[toolType]; !ok {
+				names = append(names, toolType)
+			}
 		}
 	}
 	return names

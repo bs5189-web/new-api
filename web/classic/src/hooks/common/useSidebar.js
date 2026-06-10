@@ -50,6 +50,8 @@ export const DEFAULT_ADMIN_CONFIG = {
     channel: true,
     models: true,
     deployment: true,
+    tool_stats: true,
+    key_usage_stats: true,
     redemption: true,
     user: true,
     subscription: true,

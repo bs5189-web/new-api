@@ -40,6 +40,7 @@ const routerMap = {
   subscription: '/console/subscription',
   log: '/console/log',
   tool_stats: '/console/tool-stats',
+  key_usage_stats: '/console/key-usage-stats',
   midjourney: '/console/midjourney',
   setting: '/console/setting',
   about: '/about',
@@ -106,6 +107,11 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         className:
           localStorage.getItem('enable_task') === 'true' ? '' : 'tableHiddle',
       },
+      {
+        text: t('技能统计'),
+        itemKey: 'tool_stats',
+        to: '/console/tool-stats',
+      },
     ];
 
     // 根据配置过滤项目
@@ -155,9 +161,9 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         className: isAdmin() ? '' : 'tableHiddle',
       },
       {
-        text: t('技能统计'),
-        itemKey: 'tool_stats',
-        to: '/console/tool-stats',
+        text: t('Key使用统计'),
+        itemKey: 'key_usage_stats',
+        to: '/console/key-usage-stats',
         className: isAdmin() ? '' : 'tableHiddle',
       },
       {

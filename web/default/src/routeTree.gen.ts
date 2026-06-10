@@ -54,6 +54,7 @@ import { Route as AuthenticatedModelsSectionRouteImport } from './routes/_authen
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedDashboardSectionRouteImport } from './routes/_authenticated/dashboard/$section'
 import { Route as AuthenticatedConsoleToolStatsRouteImport } from './routes/_authenticated/console/tool-stats'
+import { Route as AuthenticatedConsoleKeyUsageStatsRouteImport } from './routes/_authenticated/console/key-usage-stats'
 import { Route as AuthenticatedChatChatIdRouteImport } from './routes/_authenticated/chat/$chatId'
 import { Route as authUserResetRouteImport } from './routes/(auth)/user/reset'
 import { Route as AuthenticatedSystemSettingsSiteIndexRouteImport } from './routes/_authenticated/system-settings/site/index'
@@ -310,6 +311,12 @@ const AuthenticatedConsoleToolStatsRoute =
     path: '/console/tool-stats',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedConsoleKeyUsageStatsRoute =
+  AuthenticatedConsoleKeyUsageStatsRouteImport.update({
+    id: '/console/key-usage-stats',
+    path: '/console/key-usage-stats',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedChatChatIdRoute = AuthenticatedChatChatIdRouteImport.update({
   id: '/chat/$chatId',
   path: '/chat/$chatId',
@@ -433,6 +440,7 @@ export interface FileRoutesByFullPath {
   '/setup/': typeof SetupIndexRoute
   '/user/reset': typeof authUserResetRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
+  '/console/key-usage-stats': typeof AuthenticatedConsoleKeyUsageStatsRoute
   '/console/tool-stats': typeof AuthenticatedConsoleToolStatsRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -493,6 +501,7 @@ export interface FileRoutesByTo {
   '/setup': typeof SetupIndexRoute
   '/user/reset': typeof authUserResetRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
+  '/console/key-usage-stats': typeof AuthenticatedConsoleKeyUsageStatsRoute
   '/console/tool-stats': typeof AuthenticatedConsoleToolStatsRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -557,6 +566,7 @@ export interface FileRoutesById {
   '/setup/': typeof SetupIndexRoute
   '/(auth)/user/reset': typeof authUserResetRoute
   '/_authenticated/chat/$chatId': typeof AuthenticatedChatChatIdRoute
+  '/_authenticated/console/key-usage-stats': typeof AuthenticatedConsoleKeyUsageStatsRoute
   '/_authenticated/console/tool-stats': typeof AuthenticatedConsoleToolStatsRoute
   '/_authenticated/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -620,6 +630,7 @@ export interface FileRouteTypes {
     | '/setup/'
     | '/user/reset'
     | '/chat/$chatId'
+    | '/console/key-usage-stats'
     | '/console/tool-stats'
     | '/dashboard/$section'
     | '/errors/$error'
@@ -680,6 +691,7 @@ export interface FileRouteTypes {
     | '/setup'
     | '/user/reset'
     | '/chat/$chatId'
+    | '/console/key-usage-stats'
     | '/console/tool-stats'
     | '/dashboard/$section'
     | '/errors/$error'
@@ -743,6 +755,7 @@ export interface FileRouteTypes {
     | '/setup/'
     | '/(auth)/user/reset'
     | '/_authenticated/chat/$chatId'
+    | '/_authenticated/console/key-usage-stats'
     | '/_authenticated/console/tool-stats'
     | '/_authenticated/dashboard/$section'
     | '/_authenticated/errors/$error'
@@ -1116,6 +1129,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedConsoleToolStatsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/console/key-usage-stats': {
+      id: '/_authenticated/console/key-usage-stats'
+      path: '/console/key-usage-stats'
+      fullPath: '/console/key-usage-stats'
+      preLoaderRoute: typeof AuthenticatedConsoleKeyUsageStatsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/chat/$chatId': {
       id: '/_authenticated/chat/$chatId'
       path: '/chat/$chatId'
@@ -1318,6 +1338,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemSettingsRouteRoute: typeof AuthenticatedSystemSettingsRouteRouteWithChildren
   AuthenticatedChat2linkRoute: typeof AuthenticatedChat2linkRoute
   AuthenticatedChatChatIdRoute: typeof AuthenticatedChatChatIdRoute
+  AuthenticatedConsoleKeyUsageStatsRoute: typeof AuthenticatedConsoleKeyUsageStatsRoute
   AuthenticatedConsoleToolStatsRoute: typeof AuthenticatedConsoleToolStatsRoute
   AuthenticatedDashboardSectionRoute: typeof AuthenticatedDashboardSectionRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
@@ -1341,6 +1362,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedSystemSettingsRouteRouteWithChildren,
   AuthenticatedChat2linkRoute: AuthenticatedChat2linkRoute,
   AuthenticatedChatChatIdRoute: AuthenticatedChatChatIdRoute,
+  AuthenticatedConsoleKeyUsageStatsRoute:
+    AuthenticatedConsoleKeyUsageStatsRoute,
   AuthenticatedConsoleToolStatsRoute: AuthenticatedConsoleToolStatsRoute,
   AuthenticatedDashboardSectionRoute: AuthenticatedDashboardSectionRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,

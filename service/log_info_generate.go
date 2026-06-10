@@ -337,7 +337,7 @@ func extractToolNamesFromSources(ctx *gin.Context, info *relaycommon.RelayInfo, 
 			for _, t := range tools {
 				if m, ok := t.(map[string]any); ok {
 					name := extractSingleToolName(m)
-					if name != "" && (filter == nil || filter.MatchString(name)) {
+					if name != "" && !isBuiltinTool(name) && (filter == nil || filter.MatchString(name)) {
 						names = append(names, name)
 					}
 				}
@@ -349,12 +349,9 @@ func extractToolNamesFromSources(ctx *gin.Context, info *relaycommon.RelayInfo, 
 	if ctx != nil {
 		if raw, exists := ctx.Get(string(constant.ContextKeyOriginalTools)); exists {
 			if names, ok := raw.([]string); ok {
-				if filter == nil {
-					return names
-				}
 				filtered := make([]string, 0, len(names))
 				for _, n := range names {
-					if filter.MatchString(n) {
+					if !isBuiltinTool(n) && (filter == nil || filter.MatchString(n)) {
 						filtered = append(filtered, n)
 					}
 				}
@@ -363,6 +360,25 @@ func extractToolNamesFromSources(ctx *gin.Context, info *relaycommon.RelayInfo, 
 		}
 	}
 	return nil
+}
+
+// isBuiltinTool returns true if the tool name is a known LLM/framework built-in
+// tool that should not be logged as a user skill.
+func isBuiltinTool(name string) bool {
+	switch name {
+	// Claude Code tools
+	case "Agent", "AskUserQuestion", "Bash", "CronCreate", "CronDelete",
+		"CronList", "Edit", "EnterPlanMode", "EnterWorktree", "ExitPlanMode",
+		"ExitWorktree", "Monitor", "NotebookEdit", "PushNotification", "Read",
+		"ScheduleWakeup", "SendMessage", "Skill", "TaskCreate", "TaskGet",
+		"TaskList", "TaskOutput", "TaskStop", "TaskUpdate", "TeamCreate",
+		"TeamDelete", "TeamUpdate", "WebFetch", "WebSearch", "Workflow", "Write":
+		return true
+	// Common LLM framework tools
+	case "code_interpreter", "browser", "file_search", "python":
+		return true
+	}
+	return false
 }
 
 // extractSingleToolName extracts the tool name from a tool object map.

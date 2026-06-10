@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import {
   Activity,
   Box,
+  BarChart3,
   CreditCard,
   FileText,
   FlaskConical,
@@ -95,6 +96,11 @@ export function useSidebarData(): SidebarData {
             configUrls: ['/usage-logs/drawing', '/usage-logs/task'],
             icon: ListTodo,
           },
+          {
+            title: t('Tool Usage'),
+            url: '/console/tool-stats',
+            icon: Wrench,
+          },
         ],
       },
       {
@@ -138,9 +144,9 @@ export function useSidebarData(): SidebarData {
             icon: Ticket,
           },
           {
-            title: t('Tool Usage'),
-            url: '/console/tool-stats',
-            icon: Wrench,
+            title: t('Key Usage Stats'),
+            url: '/console/key-usage-stats',
+            icon: BarChart3,
           },
           {
             title: t('Subscription Management'),

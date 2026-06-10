@@ -198,16 +198,27 @@ func GetToolUsageStatDetail(c *gin.Context) {
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	username := c.Query("username")
-	stats, details, err := model.SumToolUsageWithDetail(startTimestamp, endTimestamp, username)
+	page, _ := strconv.Atoi(c.Query("page"))
+	pageSize, _ := strconv.Atoi(c.Query("page_size"))
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	stats, details, totalCount, err := model.SumToolUsageWithDetail(startTimestamp, endTimestamp, username, page, pageSize)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    stats,
-		"details": details,
+		"success":     true,
+		"message":     "",
+		"data":        stats,
+		"details":     details,
+		"total_count": totalCount,
+		"page":        page,
+		"page_size":   pageSize,
 	})
 }
 
@@ -215,16 +226,27 @@ func GetToolUsageSelfStatDetail(c *gin.Context) {
 	username := c.GetString("username")
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
-	stats, details, err := model.SumToolUsageWithDetail(startTimestamp, endTimestamp, username)
+	page, _ := strconv.Atoi(c.Query("page"))
+	pageSize, _ := strconv.Atoi(c.Query("page_size"))
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	stats, details, totalCount, err := model.SumToolUsageWithDetail(startTimestamp, endTimestamp, username, page, pageSize)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 	c.JSON(200, gin.H{
-		"success": true,
-		"message": "",
-		"data":    stats,
-		"details": details,
+		"success":     true,
+		"message":     "",
+		"data":        stats,
+		"details":     details,
+		"total_count": totalCount,
+		"page":        page,
+		"page_size":   pageSize,
 	})
 }
 

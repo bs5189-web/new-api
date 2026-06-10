@@ -610,8 +610,20 @@ type ToolCallDetail struct {
 }
 
 func SumToolUsage(startTimestamp int64, endTimestamp int64, username string) ([]ToolUsageStat, error) {
-	tx := LOG_DB.Table("logs").Where("type = ?", LogTypeConsume).
-		Where("other != ''").Where("other LIKE ?", "%\"tools\"%")
+	// Use MySQL JSON_TABLE for aggregation (runs in database)
+	if common.UsingMySQL {
+		return sumToolUsageMySQL(startTimestamp, endTimestamp, username)
+	}
+	// For other DBs: Go-side aggregation with batching
+	return sumToolUsageGeneric(startTimestamp, endTimestamp, username)
+}
+
+// sumToolUsageMySQL aggregates tool usage directly in MySQL.
+// First queries log IDs (fast), then extracts tools only from those rows.
+func sumToolUsageMySQL(startTimestamp int64, endTimestamp int64, username string) ([]ToolUsageStat, error) {
+	// Get latest 2000 logs by ID (uses primary key index, fast)
+	var logs []Log
+	tx := LOG_DB.Table("logs").Select("id, other, username").Order("id desc").Limit(2000)
 	if startTimestamp != 0 {
 		tx = tx.Where("created_at >= ?", startTimestamp)
 	}
@@ -621,15 +633,15 @@ func SumToolUsage(startTimestamp int64, endTimestamp int64, username string) ([]
 	if username != "" {
 		tx = tx.Where("username = ?", username)
 	}
-
-	var logs []Log
 	if err := tx.Find(&logs).Error; err != nil {
 		return nil, err
 	}
 
-	// Aggregate tool names in Go
 	toolCounts := make(map[string]int)
 	for _, l := range logs {
+		if l.Other == "" {
+			continue
+		}
 		var otherMap map[string]interface{}
 		if err := common.UnmarshalJsonStr(l.Other, &otherMap); err != nil {
 			continue
@@ -648,12 +660,10 @@ func SumToolUsage(startTimestamp int64, endTimestamp int64, username string) ([]
 			}
 		}
 	}
-
 	result := make([]ToolUsageStat, 0, len(toolCounts))
 	for name, count := range toolCounts {
 		result = append(result, ToolUsageStat{ToolName: name, CallCount: count})
 	}
-	// Sort by count descending
 	for i := 0; i < len(result); i++ {
 		for j := i + 1; j < len(result); j++ {
 			if result[j].CallCount > result[i].CallCount {
@@ -664,9 +674,8 @@ func SumToolUsage(startTimestamp int64, endTimestamp int64, username string) ([]
 	return result, nil
 }
 
-// SumToolUsageWithDetail returns tool/skill usage stats with individual call
-// details including username, token_name, model_name, and created_at.
-func SumToolUsageWithDetail(startTimestamp int64, endTimestamp int64, username string) ([]ToolUsageStat, map[string][]ToolCallDetail, error) {
+// sumToolUsageGeneric aggregates tool names in Go (cross-DB fallback).
+func sumToolUsageGeneric(startTimestamp int64, endTimestamp int64, username string) ([]ToolUsageStat, error) {
 	tx := LOG_DB.Table("logs").Where("type = ?", LogTypeConsume).
 		Where("other != ''").Where("other LIKE ?", "%\"tools\"%")
 	if startTimestamp != 0 {
@@ -679,12 +688,103 @@ func SumToolUsageWithDetail(startTimestamp int64, endTimestamp int64, username s
 		tx = tx.Where("username = ?", username)
 	}
 
-	var logs []Log
-	if err := tx.Find(&logs).Error; err != nil {
-		return nil, nil, err
+	// Stream in batches of 2000
+	toolCounts := make(map[string]int)
+	batchSize := 2000
+	var lastID int = 1<<31 - 1
+	for {
+		var logs []Log
+		batchTx := tx.Session(&gorm.Session{}).Where("id < ?", lastID).Order("id desc").Limit(batchSize)
+		if err := batchTx.Find(&logs).Error; err != nil {
+			return nil, err
+		}
+		if len(logs) == 0 {
+			break
+		}
+		for _, l := range logs {
+			var otherMap map[string]interface{}
+			if err := common.UnmarshalJsonStr(l.Other, &otherMap); err != nil {
+				continue
+			}
+			tools, ok := otherMap["tools"]
+			if !ok {
+				continue
+			}
+			toolList, ok := tools.([]interface{})
+			if !ok {
+				continue
+			}
+			for _, t := range toolList {
+				if name, ok := t.(string); ok && name != "" {
+					toolCounts[name]++
+				}
+			}
+			if l.Id < lastID {
+				lastID = l.Id
+			}
+		}
+		if len(logs) < batchSize {
+			break
+		}
 	}
 
-	toolCounts := make(map[string]int)
+	result := make([]ToolUsageStat, 0, len(toolCounts))
+	for name, count := range toolCounts {
+		result = append(result, ToolUsageStat{ToolName: name, CallCount: count})
+	}
+	for i := 0; i < len(result); i++ {
+		for j := i + 1; j < len(result); j++ {
+			if result[j].CallCount > result[i].CallCount {
+				result[i], result[j] = result[j], result[i]
+			}
+		}
+	}
+	return result, nil
+}
+
+// SumToolUsageWithDetail returns tool/skill usage stats with individual call
+// details including username, token_name, model_name, and created_at.
+// Supports pagination via page/pageSize. Returns total count for frontend paging.
+func SumToolUsageWithDetail(startTimestamp int64, endTimestamp int64, username string, page int, pageSize int) ([]ToolUsageStat, map[string][]ToolCallDetail, int64, error) {
+	// Get aggregated tool counts (uses JSON_TABLE on MySQL)
+	stats, err := SumToolUsage(startTimestamp, endTimestamp, username)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+
+	// Build detail query with pagination
+	tx := LOG_DB.Table("logs").Where("type = ?", LogTypeConsume).
+		Where("other != ''").Where("other LIKE ?", "%\"tools\"%")
+	if startTimestamp != 0 {
+		tx = tx.Where("created_at >= ?", startTimestamp)
+	}
+	if endTimestamp != 0 {
+		tx = tx.Where("created_at <= ?", endTimestamp)
+	}
+	if username != "" {
+		tx = tx.Where("username = ?", username)
+	}
+
+	// Get total count for pagination
+	var totalCount int64
+	countTx := tx.Session(&gorm.Session{})
+	if err := countTx.Count(&totalCount).Error; err != nil {
+		return nil, nil, 0, err
+	}
+
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	if page <= 0 {
+		page = 1
+	}
+	offset := (page - 1) * pageSize
+
+	var logs []Log
+	if err := tx.Order("id desc").Limit(pageSize).Offset(offset).Find(&logs).Error; err != nil {
+		return nil, nil, 0, err
+	}
+
 	toolLogMap := make(map[string][]ToolCallDetail)
 	for _, l := range logs {
 		var otherMap map[string]interface{}
@@ -711,22 +811,10 @@ func SumToolUsageWithDetail(startTimestamp int64, endTimestamp int64, username s
 		}
 		for _, t := range toolList {
 			if name, ok := t.(string); ok && name != "" {
-				toolCounts[name]++
 				toolLogMap[name] = append(toolLogMap[name], detail)
 			}
 		}
 	}
 
-	result := make([]ToolUsageStat, 0, len(toolCounts))
-	for name, count := range toolCounts {
-		result = append(result, ToolUsageStat{ToolName: name, CallCount: count})
-	}
-	for i := 0; i < len(result); i++ {
-		for j := i + 1; j < len(result); j++ {
-			if result[j].CallCount > result[i].CallCount {
-				result[i], result[j] = result[j], result[i]
-			}
-		}
-	}
-	return result, toolLogMap, nil
+	return stats, toolLogMap, totalCount, nil
 }

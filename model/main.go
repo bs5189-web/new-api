@@ -23,6 +23,11 @@ var commonTrueVal string
 var commonFalseVal string
 
 var logKeyCol string
+
+// autoMigrateRecordFile stores the date of the last successful AutoMigrate.
+// AutoMigrate is skipped on subsequent starts within the same calendar day.
+// This avoids the slow per-table structure checks on remote databases.
+const autoMigrateRecordFile = "data/.auto_migrate_date"
 var logGroupCol string
 
 func initCol() {
@@ -201,8 +206,15 @@ func InitDB() (err error) {
 		if common.UsingMySQL {
 			//_, _ = sqlDB.Exec("ALTER TABLE channels MODIFY model_mapping TEXT;") // TODO: delete this line when most users have upgraded
 		}
+		if migrationDoneToday() {
+			common.SysLog("database migration skipped (already done today)")
+			return nil
+		}
 		common.SysLog("database migration started")
 		err = migrateDB()
+		if err == nil {
+			markMigrationDone()
+		}
 		return err
 	} else {
 		common.FatalLog(err)
@@ -383,6 +395,27 @@ func migrateLOGDB() error {
 		return err
 	}
 	return nil
+}
+
+// migrationDoneToday checks if AutoMigrate was already run today.
+// If the marker file exists with today's date, skip to avoid the
+// slow per-table structure checks on remote databases.
+func migrationDoneToday() bool {
+	data, err := os.ReadFile(autoMigrateRecordFile)
+	if err != nil {
+		return false
+	}
+	return string(data) == time.Now().Format("2006-01-02")
+}
+
+// markMigrationDone records today's date as the last migration time.
+func markMigrationDone() {
+	dir := autoMigrateRecordFile
+	if idx := strings.LastIndex(dir, "/"); idx >= 0 {
+		dir = dir[:idx]
+	}
+	os.MkdirAll(dir, 0755)
+	os.WriteFile(autoMigrateRecordFile, []byte(time.Now().Format("2006-01-02")), 0644)
 }
 
 type sqliteColumnDef struct {
