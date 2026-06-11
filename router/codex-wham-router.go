@@ -8,6 +8,15 @@ import (
 
 func RegisterCodexWhamRoutes(router *gin.Engine) {
 	for _, path := range []string{
+		"/wham/profiles/me",
+		"/backend-api/wham/profiles/me",
+		"/api/wham/profiles/me",
+		"/codex-backend/wham/profiles/me",
+	} {
+		router.GET(path, middleware.RouteTag("relay"), middleware.SystemPerformanceCheck(), middleware.TokenAuth(), controller.CodexWhamProfileMe)
+	}
+
+	for _, path := range []string{
 		"/backend-api/wham/apps",
 		"/api/codex/apps",
 		"/codex-backend/codex/apps",
